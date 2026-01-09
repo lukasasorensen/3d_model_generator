@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { Message } from "../../../shared/src/types/model";
+import { logger } from "../infrastructure/logger/logger";
 
 export interface ConversationMessage {
   role: "user" | "assistant";
@@ -11,6 +12,7 @@ export class OpenAIService {
   private systemPrompt: string;
 
   constructor(apiKey: string) {
+    logger.debug("Initializing OpenAI service");
     this.client = new OpenAI({ apiKey });
     this.systemPrompt = `You are an expert OpenSCAD programmer. Generate ONLY valid OpenSCAD code based on user descriptions.
 
@@ -32,6 +34,8 @@ When modifying existing code based on follow-up requests:
 - Take the previous OpenSCAD code into account
 - Apply the requested modifications while keeping the rest of the design intact
 - Output the complete, updated OpenSCAD code`;
+
+    logger.debug("OpenAI service initialized");
   }
 
   /**
@@ -42,6 +46,10 @@ When modifying existing code based on follow-up requests:
   ): AsyncGenerator<string, void, unknown> {
     // Build conversation input from message history
     const conversationInput = this.buildConversationInput(messages);
+    logger.info("Starting streaming code generation with history", {
+      messageCount: messages.length,
+      inputLength: conversationInput.length,
+    });
 
     try {
       const stream = this.client.responses.stream({
@@ -50,12 +58,28 @@ When modifying existing code based on follow-up requests:
         input: conversationInput,
       });
 
+      let totalChunks = 0;
+      let totalLength = 0;
+
       for await (const event of stream) {
         if (event.type === "response.output_text.delta" && event.delta) {
+          totalChunks++;
+          totalLength += event.delta.length;
           yield event.delta;
         }
       }
+
+      logger.info("Streaming code generation completed", {
+        totalChunks,
+        totalLength,
+      });
     } catch (error: any) {
+      logger.error("OpenAI API error during streaming generation", {
+        error: error.message,
+        code: error.code,
+        status: error.status,
+      });
+
       if (error.code === "insufficient_quota") {
         throw new Error(
           "OpenAI API quota exceeded. Please check your account."
@@ -74,15 +98,20 @@ When modifying existing code based on follow-up requests:
    */
   private buildConversationInput(messages: Message[]): string {
     if (messages.length === 0) {
+      logger.error("No messages provided for conversation input");
       throw new Error("No messages provided");
     }
 
     // For a single message, just return the prompt
     if (messages.length === 1) {
+      logger.debug("Building conversation input for single message");
       return messages[0].content;
     }
 
     // Build context from conversation history
+    logger.debug("Building conversation input from message history", {
+      messageCount: messages.length,
+    });
     const parts: string[] = [];
 
     for (const msg of messages) {
@@ -93,7 +122,12 @@ When modifying existing code based on follow-up requests:
       }
     }
 
-    return parts.join("\n\n");
+    const input = parts.join("\n\n");
+    logger.debug("Conversation input built", {
+      partsCount: parts.length,
+      inputLength: input.length,
+    });
+    return input;
   }
 
   /**
@@ -102,6 +136,10 @@ When modifying existing code based on follow-up requests:
   async *generateOpenSCADCodeStream(
     prompt: string
   ): AsyncGenerator<string, void, unknown> {
+    logger.info("Starting streaming code generation", {
+      promptLength: prompt.length,
+    });
+
     try {
       const stream = this.client.responses.stream({
         model: "gpt-5",
@@ -109,12 +147,28 @@ When modifying existing code based on follow-up requests:
         input: prompt,
       });
 
+      let totalChunks = 0;
+      let totalLength = 0;
+
       for await (const event of stream) {
         if (event.type === "response.output_text.delta" && event.delta) {
+          totalChunks++;
+          totalLength += event.delta.length;
           yield event.delta;
         }
       }
+
+      logger.info("Streaming code generation completed", {
+        totalChunks,
+        totalLength,
+      });
     } catch (error: any) {
+      logger.error("OpenAI API error during streaming generation", {
+        error: error.message,
+        code: error.code,
+        status: error.status,
+      });
+
       if (error.code === "insufficient_quota") {
         throw new Error(
           "OpenAI API quota exceeded. Please check your account."
@@ -128,19 +182,28 @@ When modifying existing code based on follow-up requests:
   }
 
   async generateOpenSCADCode(prompt: string): Promise<string> {
+    logger.info("Starting non-streaming code generation", {
+      promptLength: prompt.length,
+    });
     let code = "";
     for await (const chunk of this.generateOpenSCADCodeStream(prompt)) {
       code += chunk;
     }
-    return this.cleanCode(code);
+    const cleanedCode = this.cleanCode(code);
+    logger.info("Non-streaming code generation completed", {
+      codeLength: cleanedCode.length,
+    });
+    return cleanedCode;
   }
 
   cleanCode(code: string): string {
     let cleaned = code.trim();
 
     if (cleaned.startsWith("```openscad")) {
+      logger.debug("Removing openscad markdown code block markers");
       cleaned = cleaned.replace(/^```openscad\n/, "");
     } else if (cleaned.startsWith("```")) {
+      logger.debug("Removing generic markdown code block markers");
       cleaned = cleaned.replace(/^```\n/, "");
     }
 

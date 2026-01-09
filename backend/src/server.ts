@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { OpenSCADService } from "./services/openscadService";
 import * as path from "path";
 import { config } from "./config/config";
+import { logger } from "./infrastructure/logger/logger";
 
 const PORT = config.server.port;
 
@@ -19,85 +20,113 @@ function buildDatabaseUrl(): string {
   if (!database) missingVars.push("db.database");
 
   if (missingVars.length > 0) {
-    console.error("ERROR: Missing required database environment variables:");
-    missingVars.forEach((v) => console.error(`  - ${v}`));
-    console.error("");
-    console.error("Please set the following in backend/.env:");
-    console.error("  db.host=localhost");
-    console.error("  POSTGRES_PORT=5432 (optional, defaults to 5432)");
-    console.error("  db.username=ai_openscad");
-    console.error("  db.password=ai_openscad_dev");
-    console.error("  db.database=ai_openscad");
+    logger.error("Missing required database environment variables", {
+      missingVars,
+    });
+    logger.error("Please set the following in backend/.env:", {
+      required: [
+        "db.host=localhost",
+        "POSTGRES_PORT=5432 (optional, defaults to 5432)",
+        "db.username=ai_openscad",
+        "db.password=ai_openscad_dev",
+        "db.database=ai_openscad",
+      ],
+    });
     process.exit(1);
   }
+
+  logger.debug("Database configuration validated", {
+    host,
+    port,
+    database,
+    user,
+  });
 
   return `postgresql://${user}:${password}@${host}:${port}/${database}`;
 }
 
 async function startServer() {
+  logger.info("Starting OpenSCAD AI Model Generator Backend...");
+
   if (!config.openai.apiKey) {
-    console.error("ERROR: OPENAI_API_KEY environment variable is not set");
-    console.error("Please set your OpenAI API key in backend/.env");
+    logger.error("OPENAI_API_KEY environment variable is not set");
     process.exit(1);
   }
+  logger.debug("OpenAI API key validated");
 
   // Build DATABASE_URL from individual components for Prisma
   config.db.url = buildDatabaseUrl();
+  logger.info("Database URL configured");
 
   const openscadService = new OpenSCADService(
     path.join(__dirname, "../generated")
   );
+
+  logger.debug("Checking OpenSCAD installation...");
   const isInstalled = await openscadService.checkInstallation();
 
   if (!isInstalled) {
-    console.error("ERROR: OpenSCAD is not installed or not in PATH");
-    console.error(
-      "Please install OpenSCAD from: https://openscad.org/downloads.html"
-    );
-    console.error("");
-    console.error("Installation instructions:");
-    console.error("  macOS:   brew install openscad");
-    console.error("  Linux:   sudo apt-get install openscad");
-    console.error(
-      "  Windows: Download from https://openscad.org/downloads.html"
-    );
+    logger.error("OpenSCAD is not installed or not in PATH", {
+      instructions: {
+        macOS: "brew install openscad",
+        Linux: "sudo apt-get install openscad",
+        Windows: "Download from https://openscad.org/downloads.html",
+      },
+    });
     process.exit(1);
   }
+  logger.info("OpenSCAD installation verified");
 
   const { app, fileStorage, shutdown } = createApp();
+  logger.debug("Express application created");
 
   await fileStorage.initialize();
+  logger.info("File storage initialized");
 
   const server = app.listen(PORT, () => {
-    console.log("");
-    console.log("========================================");
-    console.log("  OpenSCAD AI Model Generator Backend");
-    console.log("========================================");
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/health`);
-    console.log("OpenSCAD installation: ✓");
-    console.log("OpenAI API key: ✓");
-    console.log("Database: ✓");
-    console.log("");
-    console.log("Ready to generate 3D models!");
-    console.log("========================================");
+    logger.info("========================================");
+    logger.info("  OpenSCAD AI Model Generator Backend");
+    logger.info("========================================");
+    logger.info(`Server running on http://localhost:${PORT}`);
+    logger.info(`Health check: http://localhost:${PORT}/health`);
+    logger.info("OpenSCAD installation: ✓");
+    logger.info("OpenAI API key: ✓");
+    logger.info("Database: ✓");
+    logger.info("Ready to generate 3D models!");
+    logger.info("========================================");
   });
 
   // Graceful shutdown
-  const gracefulShutdown = async () => {
-    console.log("\nShutting down gracefully...");
+  const gracefulShutdown = async (signal: string) => {
+    logger.info(`Received ${signal}, starting graceful shutdown...`);
     server.close(async () => {
+      logger.info("HTTP server closed");
       await shutdown();
-      console.log("Server closed");
+      logger.info("All connections closed, exiting");
       process.exit(0);
     });
   };
 
-  process.on("SIGTERM", gracefulShutdown);
-  process.on("SIGINT", gracefulShutdown);
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+  process.on("uncaughtException", (error) => {
+    logger.error("Uncaught exception", {
+      error: error.message,
+      stack: error.stack,
+    });
+    process.exit(1);
+  });
+
+  process.on("unhandledRejection", (reason, promise) => {
+    logger.error("Unhandled rejection", { reason, promise });
+  });
 }
 
 startServer().catch((error) => {
-  console.error("Failed to start server:", error);
+  logger.error("Failed to start server", {
+    error: error.message,
+    stack: error.stack,
+  });
   process.exit(1);
 });
