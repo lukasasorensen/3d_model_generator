@@ -1,6 +1,82 @@
-import { AiClient, InputMessage } from "../clients/aiClient";
+import {
+  AiClient,
+  InputMessage,
+  StreamEvent,
+  StreamEventHandler,
+} from "../clients/aiClient";
 import { Message } from "../../../shared/src/types/model";
 import { logger } from "../infrastructure/logger/logger";
+
+/**
+ * OpenSCAD-specific stream event types
+ * Extends the base AI events with OpenSCAD-specific context
+ */
+export type OpenScadStreamEventType =
+  | "code_delta"
+  | "reasoning_delta"
+  | "tool_call_start"
+  | "tool_call_delta"
+  | "tool_call_end"
+  | "done"
+  | "error";
+
+export interface BaseOpenScadEvent {
+  type: OpenScadStreamEventType;
+}
+
+export interface CodeDeltaEvent extends BaseOpenScadEvent {
+  type: "code_delta";
+  delta: string;
+}
+
+export interface OpenScadReasoningDeltaEvent extends BaseOpenScadEvent {
+  type: "reasoning_delta";
+  delta: string;
+}
+
+export interface OpenScadToolCallStartEvent extends BaseOpenScadEvent {
+  type: "tool_call_start";
+  toolCallId: string;
+  toolName: string;
+}
+
+export interface OpenScadToolCallDeltaEvent extends BaseOpenScadEvent {
+  type: "tool_call_delta";
+  toolCallId: string;
+  argumentsDelta: string;
+}
+
+export interface OpenScadToolCallEndEvent extends BaseOpenScadEvent {
+  type: "tool_call_end";
+  toolCallId: string;
+  arguments: string;
+}
+
+export interface OpenScadDoneEvent extends BaseOpenScadEvent {
+  type: "done";
+  totalCode: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+export interface OpenScadErrorEvent extends BaseOpenScadEvent {
+  type: "error";
+  error: string;
+  code?: string;
+}
+
+export type OpenScadStreamEvent =
+  | CodeDeltaEvent
+  | OpenScadReasoningDeltaEvent
+  | OpenScadToolCallStartEvent
+  | OpenScadToolCallDeltaEvent
+  | OpenScadToolCallEndEvent
+  | OpenScadDoneEvent
+  | OpenScadErrorEvent;
+
+export type OpenScadStreamEventHandler = (event: OpenScadStreamEvent) => void;
 
 /**
  * OpenSCAD-specific AI service.
@@ -36,33 +112,116 @@ When modifying existing code based on follow-up requests:
   }
 
   /**
-   * Generate OpenSCAD code with conversation history for context
+   * Generate OpenSCAD code with conversation history using event-based streaming
+   * @param messages - Array of conversation messages
+   * @param onEvent - Callback function called for each stream event
+   * @returns Promise that resolves with the complete generated code
    */
-  async *generateOpenSCADCodeStreamWithHistory(
-    messages: Message[]
-  ): AsyncGenerator<string, void, unknown> {
+  async generateCode(
+    messages: Message[],
+    onEvent: OpenScadStreamEventHandler
+  ): Promise<string> {
     const inputMessages = this.buildInputMessages(messages);
-    logger.info("Starting streaming code generation with history", {
+    logger.info("Starting streaming code generation", {
       messageCount: messages.length,
       inputMessageCount: inputMessages.length,
     });
 
+    let accumulatedCode = "";
     let totalChunks = 0;
-    let totalLength = 0;
 
-    for await (const chunk of this.aiClient.streamCompletion({
-      systemPrompt: this.systemPrompt,
-      messages: inputMessages,
-    })) {
-      totalChunks++;
-      totalLength += chunk.length;
-      yield chunk;
-    }
+    await this.aiClient.streamCompletion(
+      {
+        systemPrompt: this.systemPrompt,
+        messages: inputMessages,
+        modelTier: "medium",
+        reasoningEffort: "none",
+      },
+      (event: StreamEvent) => {
+        switch (event.type) {
+          case "text_delta":
+            accumulatedCode += event.delta;
+            totalChunks++;
+            onEvent({
+              type: "code_delta",
+              delta: event.delta,
+            });
+            break;
+
+          case "reasoning_delta":
+            onEvent({
+              type: "reasoning_delta",
+              delta: event.delta,
+            });
+            break;
+
+          case "tool_call_start":
+            onEvent({
+              type: "tool_call_start",
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+            });
+            break;
+
+          case "tool_call_delta":
+            onEvent({
+              type: "tool_call_delta",
+              toolCallId: event.toolCallId,
+              argumentsDelta: event.argumentsDelta,
+            });
+            break;
+
+          case "tool_call_end":
+            onEvent({
+              type: "tool_call_end",
+              toolCallId: event.toolCallId,
+              arguments: event.arguments,
+            });
+            break;
+
+          case "done":
+            // Clean the code before sending done event
+            const cleanedCode = this.cleanCode(accumulatedCode);
+            onEvent({
+              type: "done",
+              totalCode: cleanedCode,
+              usage: event.usage,
+            });
+            break;
+
+          case "error":
+            onEvent({
+              type: "error",
+              error: event.error,
+              code: event.code,
+            });
+            break;
+        }
+      }
+    );
 
     logger.info("Streaming code generation completed", {
       totalChunks,
-      totalLength,
+      totalLength: accumulatedCode.length,
     });
+
+    return this.cleanCode(accumulatedCode);
+  }
+
+  /**
+   * Helper to create a Message array from a single prompt
+   * Used when there's no conversation history
+   */
+  createMessagesFromPrompt(prompt: string): Message[] {
+    return [
+      {
+        id: "temp-user-message",
+        conversationId: "temp",
+        role: "user",
+        content: prompt,
+        createdAt: new Date().toISOString(),
+      },
+    ];
   }
 
   /**
@@ -100,51 +259,6 @@ When modifying existing code based on follow-up requests:
     });
 
     return inputMessages;
-  }
-
-  /**
-   * Legacy method for single prompt generation (streaming)
-   */
-  async *generateOpenSCADCodeStream(
-    prompt: string
-  ): AsyncGenerator<string, void, unknown> {
-    logger.info("Starting streaming code generation", {
-      promptLength: prompt.length,
-    });
-
-    const inputMessages: InputMessage[] = [{ role: "user", content: prompt }];
-
-    let totalChunks = 0;
-    let totalLength = 0;
-
-    for await (const chunk of this.aiClient.streamCompletion({
-      systemPrompt: this.systemPrompt,
-      messages: inputMessages,
-    })) {
-      totalChunks++;
-      totalLength += chunk.length;
-      yield chunk;
-    }
-
-    logger.info("Streaming code generation completed", {
-      totalChunks,
-      totalLength,
-    });
-  }
-
-  async generateOpenSCADCode(prompt: string): Promise<string> {
-    logger.info("Starting non-streaming code generation", {
-      promptLength: prompt.length,
-    });
-    let code = "";
-    for await (const chunk of this.generateOpenSCADCodeStream(prompt)) {
-      code += chunk;
-    }
-    const cleanedCode = this.cleanCode(code);
-    logger.info("Non-streaming code generation completed", {
-      codeLength: cleanedCode.length,
-    });
-    return cleanedCode;
   }
 
   cleanCode(code: string): string {

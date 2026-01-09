@@ -211,7 +211,7 @@ open-scad-generate-models/
 
 ### Models
 
-#### POST /api/models/generate
+#### POST /api/models/generate/stream
 
 Generate a 3D model from a text prompt (without conversation history).
 

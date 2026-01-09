@@ -5,6 +5,7 @@ import { Conversation, ConversationListItem, Message } from "../types";
 export interface StreamingState {
   status: "idle" | "generating" | "compiling" | "completed" | "error";
   streamingCode: string;
+  streamingReasoning: string;
   statusMessage: string;
 }
 
@@ -19,6 +20,7 @@ export function useConversations() {
   const [streaming, setStreaming] = useState<StreamingState>({
     status: "idle",
     streamingCode: "",
+    streamingReasoning: "",
     statusMessage: "",
   });
 
@@ -40,6 +42,7 @@ export function useConversations() {
       setStreaming({
         status: "idle",
         streamingCode: "",
+        streamingReasoning: "",
         statusMessage: "",
       });
     } catch (err: any) {
@@ -54,6 +57,7 @@ export function useConversations() {
     setStreaming({
       status: "idle",
       streamingCode: "",
+      streamingReasoning: "",
       statusMessage: "",
     });
     setError(null);
@@ -66,6 +70,7 @@ export function useConversations() {
       setStreaming({
         status: "idle",
         streamingCode: "",
+        streamingReasoning: "",
         statusMessage: "",
       });
 
@@ -106,6 +111,7 @@ export function useConversations() {
       setStreaming({
         status: "idle",
         streamingCode: "",
+        streamingReasoning: "",
         statusMessage: "",
       });
 
@@ -140,19 +146,40 @@ export function useConversations() {
         // Conversation created, waiting for generation
         break;
 
-      case "start":
+      case "generation_start":
         setStreaming({
           status: "generating",
           streamingCode: "",
+          streamingReasoning: "",
           statusMessage: event.message || "Starting...",
         });
         break;
 
-      case "code_chunk":
+      case "code_delta":
         setStreaming((prev) => ({
           ...prev,
           streamingCode: prev.streamingCode + (event.chunk || ""),
         }));
+        break;
+
+      case "reasoning_delta":
+        setStreaming((prev) => ({
+          ...prev,
+          streamingReasoning: prev.streamingReasoning + (event.chunk || ""),
+        }));
+        break;
+
+      case "tool_call_start":
+        // Could be used to show tool call UI in the future
+        console.log("Tool call started:", event.toolName);
+        break;
+
+      case "tool_call_delta":
+        // Could be used to show tool call arguments streaming
+        break;
+
+      case "tool_call_end":
+        console.log("Tool call ended:", event.toolCallId);
         break;
 
       case "code_complete":
@@ -177,12 +204,14 @@ export function useConversations() {
           setStreaming({
             status: "completed",
             streamingCode: event.data.message.scadCode || "",
+            streamingReasoning: "",
             statusMessage: "Complete!",
           });
         }
         break;
 
       case "error":
+      case "generation_error":
         throw new Error(event.error || "Stream error");
     }
   }, []);

@@ -11,7 +11,108 @@ export interface StreamCompletionParams {
   systemPrompt: string;
   messages: InputMessage[];
   modelTier?: "tiny" | "small" | "medium" | "large" | "xlarge";
+  reasoningEffort?: "none" | "low" | "medium" | "high";
 }
+
+/**
+ * SSE Stream Event Types
+ * These represent different types of content that can be streamed from the AI.
+ */
+export type StreamEventType =
+  | "text_delta"
+  | "reasoning_delta"
+  | "tool_call_start"
+  | "tool_call_delta"
+  | "tool_call_end"
+  | "done"
+  | "error";
+
+/**
+ * Base interface for all stream events
+ */
+export interface BaseStreamEvent {
+  type: StreamEventType;
+}
+
+/**
+ * Text content delta event
+ */
+export interface TextDeltaEvent extends BaseStreamEvent {
+  type: "text_delta";
+  delta: string;
+}
+
+/**
+ * Reasoning/thinking content delta event
+ */
+export interface ReasoningDeltaEvent extends BaseStreamEvent {
+  type: "reasoning_delta";
+  delta: string;
+}
+
+/**
+ * Tool call started event
+ */
+export interface ToolCallStartEvent extends BaseStreamEvent {
+  type: "tool_call_start";
+  toolCallId: string;
+  toolName: string;
+}
+
+/**
+ * Tool call argument delta event
+ */
+export interface ToolCallDeltaEvent extends BaseStreamEvent {
+  type: "tool_call_delta";
+  toolCallId: string;
+  argumentsDelta: string;
+}
+
+/**
+ * Tool call completed event
+ */
+export interface ToolCallEndEvent extends BaseStreamEvent {
+  type: "tool_call_end";
+  toolCallId: string;
+  arguments: string;
+}
+
+/**
+ * Stream completed event
+ */
+export interface DoneEvent extends BaseStreamEvent {
+  type: "done";
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+/**
+ * Error event
+ */
+export interface ErrorEvent extends BaseStreamEvent {
+  type: "error";
+  error: string;
+  code?: string;
+}
+
+/**
+ * Union type of all possible stream events
+ */
+export type StreamEvent =
+  | TextDeltaEvent
+  | ReasoningDeltaEvent
+  | ToolCallStartEvent
+  | ToolCallDeltaEvent
+  | ToolCallEndEvent
+  | DoneEvent
+  | ErrorEvent;
+
+/**
+ * Callback function for handling stream events
+ */
+export type StreamEventHandler = (event: StreamEvent) => void;
 
 /**
  * Abstract base class for AI clients.
@@ -19,14 +120,13 @@ export interface StreamCompletionParams {
  */
 export abstract class AiClient {
   /**
-   * Stream a completion from the AI model.
-   * @param systemPrompt - The system instructions for the AI
-   * @param messages - Array of conversation messages
-   * @yields Chunks of generated text
+   * Stream a completion from the AI model using event callbacks.
+   * @param params - The completion parameters (systemPrompt, messages, modelTier)
+   * @param onEvent - Callback function called for each stream event
+   * @returns Promise that resolves when streaming is complete
    */
-  abstract streamCompletion({
-    systemPrompt,
-    messages,
-    modelTier,
-  }: StreamCompletionParams): AsyncGenerator<string, void, unknown>;
+  abstract streamCompletion(
+    params: StreamCompletionParams,
+    onEvent: StreamEventHandler
+  ): Promise<void>;
 }

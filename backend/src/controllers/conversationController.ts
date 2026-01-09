@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { ConversationService } from "../services/conversationService";
-import { OpenScadAiService } from "../services/openScadAiService";
+import {
+  OpenScadAiService,
+  OpenScadStreamEvent,
+} from "../services/openScadAiService";
 import { OpenSCADService } from "../services/openscadService";
 import { FileStorageService } from "../services/fileStorageService";
 import {
@@ -17,6 +20,13 @@ export class ConversationController {
     private fileStorage: FileStorageService
   ) {
     logger.debug("ConversationController initialized");
+  }
+
+  /**
+   * Helper to write SSE events to the response
+   */
+  private writeSSE(res: Response, eventType: string, data: any): void {
+    res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
   async listConversations(req: Request, res: Response): Promise<void> {
@@ -124,12 +134,9 @@ export class ConversationController {
       const conversation = await this.conversationService.createConversation();
       logger.info("Conversation created", { conversationId: conversation.id });
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: "conversation_created",
-          conversationId: conversation.id,
-        })}\n\n`
-      );
+      this.writeSSE(res, "conversation_created", {
+        conversationId: conversation.id,
+      });
 
       // Add user message
       await this.conversationService.addUserMessage(conversation.id, prompt);
@@ -137,12 +144,9 @@ export class ConversationController {
         conversationId: conversation.id,
       });
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: "start",
-          message: "Generating OpenSCAD code...",
-        })}\n\n`
-      );
+      this.writeSSE(res, "generation_start", {
+        message: "Generating OpenSCAD code...",
+      });
 
       // Get messages for context
       const messages = await this.conversationService.getConversationMessages(
@@ -153,41 +157,79 @@ export class ConversationController {
         messageCount: messages.length,
       });
 
-      // Generate code with streaming
+      // Generate code with event-based streaming
       logger.info("Starting OpenSCAD code generation", {
         conversationId: conversation.id,
       });
+
       let scadCode = "";
       let chunkCount = 0;
-      for await (const chunk of this.openScadAiService.generateOpenSCADCodeStreamWithHistory(
-        messages
-      )) {
-        scadCode += chunk;
-        chunkCount++;
-        res.write(`data: ${JSON.stringify({ type: "code_chunk", chunk })}\n\n`);
-      }
+
+      scadCode = await this.openScadAiService.generateCode(
+        messages,
+        (event: OpenScadStreamEvent) => {
+          switch (event.type) {
+            case "code_delta":
+              chunkCount++;
+              this.writeSSE(res, "code_delta", { chunk: event.delta });
+              break;
+
+            case "reasoning_delta":
+              this.writeSSE(res, "reasoning_delta", { chunk: event.delta });
+              break;
+
+            case "tool_call_start":
+              this.writeSSE(res, "tool_call_start", {
+                toolCallId: event.toolCallId,
+                toolName: event.toolName,
+              });
+              break;
+
+            case "tool_call_delta":
+              this.writeSSE(res, "tool_call_delta", {
+                toolCallId: event.toolCallId,
+                argumentsDelta: event.argumentsDelta,
+              });
+              break;
+
+            case "tool_call_end":
+              this.writeSSE(res, "tool_call_end", {
+                toolCallId: event.toolCallId,
+                arguments: event.arguments,
+              });
+              break;
+
+            case "done":
+              this.writeSSE(res, "code_complete", {
+                code: event.totalCode,
+                usage: event.usage,
+              });
+              break;
+
+            case "error":
+              this.writeSSE(res, "generation_error", {
+                error: event.error,
+                code: event.code,
+              });
+              break;
+          }
+        }
+      );
+
       logger.info("Code generation completed", {
         conversationId: conversation.id,
         codeLength: scadCode.length,
         chunkCount,
       });
 
-      scadCode = this.openScadAiService.cleanCode(scadCode);
-      res.write(
-        `data: ${JSON.stringify({ type: "code_complete", code: scadCode })}\n\n`
-      );
-
       // Save SCAD file
       const { id: fileId, filePath: scadPath } =
         await this.fileStorage.saveScadFile(scadCode);
       logger.debug("SCAD file saved", { fileId, scadPath });
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: "compiling",
-          message: "Compiling with OpenSCAD...",
-        })}\n\n`
-      );
+      this.writeSSE(res, "compiling", {
+        message: "Compiling with OpenSCAD...",
+      });
 
       // Generate 3D model
       logger.info("Compiling 3D model", {
@@ -227,15 +269,12 @@ export class ConversationController {
       const updatedConversation =
         await this.conversationService.getConversation(conversation.id);
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: "completed",
-          data: {
-            conversation: updatedConversation,
-            message: assistantMessage,
-          },
-        })}\n\n`
-      );
+      this.writeSSE(res, "completed", {
+        data: {
+          conversation: updatedConversation,
+          message: assistantMessage,
+        },
+      });
 
       logger.info("Conversation creation completed successfully", {
         conversationId: conversation.id,
@@ -247,12 +286,9 @@ export class ConversationController {
         error: error.message,
         stack: error.stack,
       });
-      res.write(
-        `data: ${JSON.stringify({
-          type: "error",
-          error: error.message || "Failed to create conversation",
-        })}\n\n`
-      );
+      this.writeSSE(res, "error", {
+        error: error.message || "Failed to create conversation",
+      });
       res.end();
     }
   }
@@ -322,12 +358,9 @@ export class ConversationController {
       await this.conversationService.addUserMessage(conversationId, prompt);
       logger.debug("User message added", { conversationId });
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: "start",
-          message: "Generating OpenSCAD code...",
-        })}\n\n`
-      );
+      this.writeSSE(res, "generation_start", {
+        message: "Generating OpenSCAD code...",
+      });
 
       // Get all messages for context
       const messages = await this.conversationService.getConversationMessages(
@@ -338,42 +371,80 @@ export class ConversationController {
         messageCount: messages.length,
       });
 
-      // Generate code with streaming (includes conversation history)
+      // Generate code with event-based streaming (includes conversation history)
       logger.info("Starting OpenSCAD code generation with history", {
         conversationId,
         messageCount: messages.length,
       });
+
       let scadCode = "";
       let chunkCount = 0;
-      for await (const chunk of this.openScadAiService.generateOpenSCADCodeStreamWithHistory(
-        messages
-      )) {
-        scadCode += chunk;
-        chunkCount++;
-        res.write(`data: ${JSON.stringify({ type: "code_chunk", chunk })}\n\n`);
-      }
+
+      scadCode = await this.openScadAiService.generateCode(
+        messages,
+        (event: OpenScadStreamEvent) => {
+          switch (event.type) {
+            case "code_delta":
+              chunkCount++;
+              this.writeSSE(res, "code_delta", { chunk: event.delta });
+              break;
+
+            case "reasoning_delta":
+              this.writeSSE(res, "reasoning_delta", { chunk: event.delta });
+              break;
+
+            case "tool_call_start":
+              this.writeSSE(res, "tool_call_start", {
+                toolCallId: event.toolCallId,
+                toolName: event.toolName,
+              });
+              break;
+
+            case "tool_call_delta":
+              this.writeSSE(res, "tool_call_delta", {
+                toolCallId: event.toolCallId,
+                argumentsDelta: event.argumentsDelta,
+              });
+              break;
+
+            case "tool_call_end":
+              this.writeSSE(res, "tool_call_end", {
+                toolCallId: event.toolCallId,
+                arguments: event.arguments,
+              });
+              break;
+
+            case "done":
+              this.writeSSE(res, "code_complete", {
+                code: event.totalCode,
+                usage: event.usage,
+              });
+              break;
+
+            case "error":
+              this.writeSSE(res, "generation_error", {
+                error: event.error,
+                code: event.code,
+              });
+              break;
+          }
+        }
+      );
+
       logger.info("Code generation completed", {
         conversationId,
         codeLength: scadCode.length,
         chunkCount,
       });
 
-      scadCode = this.openScadAiService.cleanCode(scadCode);
-      res.write(
-        `data: ${JSON.stringify({ type: "code_complete", code: scadCode })}\n\n`
-      );
-
       // Save SCAD file
       const { id: fileId, filePath: scadPath } =
         await this.fileStorage.saveScadFile(scadCode);
       logger.debug("SCAD file saved", { conversationId, fileId, scadPath });
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: "compiling",
-          message: "Compiling with OpenSCAD...",
-        })}\n\n`
-      );
+      this.writeSSE(res, "compiling", {
+        message: "Compiling with OpenSCAD...",
+      });
 
       // Generate 3D model
       logger.info("Compiling 3D model", { conversationId, format, fileId });
@@ -409,15 +480,12 @@ export class ConversationController {
       const updatedConversation =
         await this.conversationService.getConversation(conversationId);
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: "completed",
-          data: {
-            conversation: updatedConversation,
-            message: assistantMessage,
-          },
-        })}\n\n`
-      );
+      this.writeSSE(res, "completed", {
+        data: {
+          conversation: updatedConversation,
+          message: assistantMessage,
+        },
+      });
 
       logger.info("Message added successfully", {
         conversationId,
@@ -430,12 +498,9 @@ export class ConversationController {
         error: error.message,
         stack: error.stack,
       });
-      res.write(
-        `data: ${JSON.stringify({
-          type: "error",
-          error: error.message || "Failed to add message",
-        })}\n\n`
-      );
+      this.writeSSE(res, "error", {
+        error: error.message || "Failed to add message",
+      });
       res.end();
     }
   }

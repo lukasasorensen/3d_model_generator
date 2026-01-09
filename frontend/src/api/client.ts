@@ -15,11 +15,16 @@ const API_BASE_URL =
 
 export interface StreamEvent {
   type:
-    | "start"
-    | "code_chunk"
+    | "generation_start"
+    | "code_delta"
+    | "reasoning_delta"
+    | "tool_call_start"
+    | "tool_call_delta"
+    | "tool_call_end"
     | "code_complete"
     | "compiling"
     | "completed"
+    | "generation_error"
     | "error"
     | "conversation_created";
   message?: string;
@@ -30,16 +35,31 @@ export interface StreamEvent {
     | { conversation: Conversation; message: Message };
   error?: string;
   conversationId?: string;
+  // Tool call fields
+  toolCallId?: string;
+  toolName?: string;
+  argumentsDelta?: string;
+  arguments?: string;
+  // Usage stats
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
 }
 
 export interface ConversationStreamEvent {
   type:
     | "conversation_created"
-    | "start"
-    | "code_chunk"
+    | "generation_start"
+    | "code_delta"
+    | "reasoning_delta"
+    | "tool_call_start"
+    | "tool_call_delta"
+    | "tool_call_end"
     | "code_complete"
     | "compiling"
     | "completed"
+    | "generation_error"
     | "error";
   message?: string;
   chunk?: string;
@@ -50,6 +70,69 @@ export interface ConversationStreamEvent {
   };
   error?: string;
   conversationId?: string;
+  // Tool call fields
+  toolCallId?: string;
+  toolName?: string;
+  argumentsDelta?: string;
+  arguments?: string;
+  // Usage stats
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+/**
+ * Parse SSE events from a chunk of data.
+ * Handles both named events (event: type\ndata: json) and simple data events (data: json with type inside)
+ */
+function parseSSEEvents(
+  chunk: string
+): Array<{ eventType: string; data: any }> {
+  const events: Array<{ eventType: string; data: any }> = [];
+  const lines = chunk.split("\n");
+
+  let currentEventType: string | null = null;
+  let currentData: string | null = null;
+
+  for (const line of lines) {
+    if (line.startsWith("event: ")) {
+      // Named event - store the event type
+      currentEventType = line.slice(7).trim();
+    } else if (line.startsWith("data: ")) {
+      // Data line
+      currentData = line.slice(6);
+
+      try {
+        const parsedData = JSON.parse(currentData);
+
+        // If we have a named event type, use it; otherwise fall back to type in data
+        const eventType = currentEventType || parsedData.type;
+
+        if (eventType) {
+          events.push({
+            eventType,
+            data: parsedData,
+          });
+        }
+      } catch (e) {
+        // JSON parse error - skip this event
+        if (!(e instanceof SyntaxError)) {
+          throw e;
+        }
+      }
+
+      // Reset for next event
+      currentEventType = null;
+      currentData = null;
+    } else if (line === "") {
+      // Empty line marks end of an event - reset state
+      currentEventType = null;
+      currentData = null;
+    }
+  }
+
+  return events;
 }
 
 async function streamRequest(
@@ -83,24 +166,18 @@ async function streamRequest(
       if (done) break;
 
       const chunk = decoder.decode(value);
-      const lines = chunk.split("\n");
+      const events = parseSSEEvents(chunk);
 
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6);
-          try {
-            const event = JSON.parse(data) as ConversationStreamEvent;
-            onEvent(event);
+      for (const { eventType, data } of events) {
+        const event: ConversationStreamEvent = {
+          type: eventType as ConversationStreamEvent["type"],
+          ...data,
+        };
 
-            if (event.type === "error") {
-              throw new Error(event.error || "Stream error");
-            }
-          } catch (e) {
-            if (e instanceof SyntaxError) {
-              continue;
-            }
-            throw e;
-          }
+        onEvent(event);
+
+        if (event.type === "error" || event.type === "generation_error") {
+          throw new Error(event.error || "Stream error");
         }
       }
     }
@@ -110,7 +187,7 @@ async function streamRequest(
 }
 
 export const apiClient = {
-  // Legacy model generation (without conversation)
+  // Standalone model generation (without conversation history)
   async generateModelStream(
     request: ModelGenerationRequest,
     onEvent: (event: StreamEvent) => void
@@ -141,45 +218,24 @@ export const apiClient = {
         if (done) break;
 
         const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
+        const events = parseSSEEvents(chunk);
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            try {
-              const event = JSON.parse(data) as StreamEvent;
-              onEvent(event);
+        for (const { eventType, data } of events) {
+          const event: StreamEvent = {
+            type: eventType as StreamEvent["type"],
+            ...data,
+          };
 
-              if (event.type === "error") {
-                throw new Error(event.error || "Stream error");
-              }
-            } catch (e) {
-              if (e instanceof SyntaxError) {
-                continue;
-              }
-              throw e;
-            }
+          onEvent(event);
+
+          if (event.type === "error" || event.type === "generation_error") {
+            throw new Error(event.error || "Stream error");
           }
         }
       }
     } finally {
       reader.releaseLock();
     }
-  },
-
-  async generateModel(
-    request: ModelGenerationRequest
-  ): Promise<ModelGenerationResponse> {
-    const response = await axios.post<ApiResponse<ModelGenerationResponse>>(
-      `${API_BASE_URL}/models/generate`,
-      request
-    );
-
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || "Failed to generate model");
-    }
-
-    return response.data.data;
   },
 
   getModelUrl(id: string, format: "stl" | "3mf"): string {

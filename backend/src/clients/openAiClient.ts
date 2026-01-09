@@ -1,11 +1,18 @@
 import OpenAI from "openai";
-import { AiClient, InputMessage, StreamCompletionParams } from "./aiClient";
+import {
+  AiClient,
+  InputMessage,
+  StreamCompletionParams,
+  StreamEventHandler,
+} from "./aiClient";
 import { logger } from "../infrastructure/logger/logger";
 import { config } from "../config/config";
+import { ReasoningEffort } from "openai/resources/shared";
+import { ResponseStreamParams } from "openai/lib/responses/ResponseStream";
 
 /**
  * OpenAI implementation of the AI client.
- * Provides generic streaming completion functionality using the OpenAI API.
+ * Provides event-based SSE streaming using the OpenAI API.
  */
 export class OpenAiClient extends AiClient {
   private client: OpenAI;
@@ -31,16 +38,19 @@ export class OpenAiClient extends AiClient {
   }
 
   /**
-   * Stream a completion from the OpenAI API.
-   * @param systemPrompt - The system instructions for the AI
-   * @param messages - Array of conversation messages
-   * @yields Chunks of generated text
+   * Stream a completion from the OpenAI API using event callbacks.
+   * @param params - The completion parameters
+   * @param onEvent - Callback function called for each stream event
    */
-  async *streamCompletion({
-    systemPrompt,
-    messages,
-    modelTier = "small",
-  }: StreamCompletionParams): AsyncGenerator<string, void, unknown> {
+  async streamCompletion(
+    {
+      systemPrompt,
+      messages,
+      modelTier = "small",
+      reasoningEffort = "low",
+    }: StreamCompletionParams,
+    onEvent: StreamEventHandler
+  ): Promise<void> {
     logger.debug("Starting streaming completion", {
       systemPromptLength: systemPrompt.length,
       messageCount: messages.length,
@@ -49,21 +59,124 @@ export class OpenAiClient extends AiClient {
     try {
       const openAiInput = this.convertToOpenAiInput(messages);
 
-      const stream = this.client.responses.stream({
+      const responseParams: ResponseStreamParams = {
         model: this.getModelForTier(modelTier ?? "small"),
         instructions: systemPrompt,
         input: openAiInput,
-      });
+      };
+
+      // only for gpt-5 models
+      if (responseParams.model.includes("gpt-5")) {
+        responseParams.reasoning = {
+          effort: this.getReasoningEffortForTier(
+            reasoningEffort
+          ) as ReasoningEffort,
+        };
+      }
+
+      const stream = this.client.responses.stream(responseParams);
 
       let totalChunks = 0;
       let totalLength = 0;
 
+      // Track tool calls in progress
+      const activeToolCalls: Map<string, { name: string; arguments: string }> =
+        new Map();
+
       for await (const event of stream) {
-        logger.debug("OpenAI event", { event });
-        if (event.type === "response.output_text.delta" && event.delta) {
-          totalChunks++;
-          totalLength += event.delta.length;
-          yield event.delta;
+        logger.debug("OpenAI event", { eventType: event.type });
+
+        switch (event.type) {
+          // Text output delta
+          case "response.output_text.delta":
+            if (event.delta) {
+              totalChunks++;
+              totalLength += event.delta.length;
+              onEvent({
+                type: "text_delta",
+                delta: event.delta,
+              });
+            }
+            break;
+
+          // Reasoning/thinking delta (for reasoning models)
+          case "response.reasoning_summary_text.delta":
+            if (event.delta) {
+              onEvent({
+                type: "reasoning_delta",
+                delta: event.delta,
+              });
+            }
+            break;
+
+          // Function call started
+          case "response.function_call_arguments.delta":
+            // OpenAI sends function call arguments as deltas
+            // We need to track them by their call_id
+            if (event.item_id) {
+              const existing = activeToolCalls.get(event.item_id);
+              if (existing) {
+                existing.arguments += event.delta || "";
+                onEvent({
+                  type: "tool_call_delta",
+                  toolCallId: event.item_id,
+                  argumentsDelta: event.delta || "",
+                });
+              }
+            }
+            break;
+
+          // Output item added - could be a function call
+          case "response.output_item.added":
+            if (event.item && event.item.type === "function_call") {
+              const item = event.item as {
+                id: string;
+                call_id: string;
+                name: string;
+              };
+              activeToolCalls.set(item.id, {
+                name: item.name,
+                arguments: "",
+              });
+              onEvent({
+                type: "tool_call_start",
+                toolCallId: item.id,
+                toolName: item.name,
+              });
+            }
+            break;
+
+          // Output item completed - function call done
+          case "response.output_item.done":
+            if (event.item && event.item.type === "function_call") {
+              const item = event.item as { id: string; arguments: string };
+              const toolCall = activeToolCalls.get(item.id);
+              if (toolCall) {
+                onEvent({
+                  type: "tool_call_end",
+                  toolCallId: item.id,
+                  arguments: item.arguments || toolCall.arguments,
+                });
+                activeToolCalls.delete(item.id);
+              }
+            }
+            break;
+
+          // Response completed
+          case "response.completed":
+            // Extract usage if available
+            const response = event.response;
+            const usage = response?.usage;
+            onEvent({
+              type: "done",
+              usage: usage
+                ? {
+                    inputTokens: usage.input_tokens,
+                    outputTokens: usage.output_tokens,
+                  }
+                : undefined,
+            });
+            break;
         }
       }
 
@@ -78,14 +191,22 @@ export class OpenAiClient extends AiClient {
         status: error.status,
       });
 
+      let errorMessage = error.message;
+      let errorCode = error.code;
+
       if (error.code === "insufficient_quota") {
-        throw new Error(
-          "OpenAI API quota exceeded. Please check your account."
-        );
+        errorMessage = "OpenAI API quota exceeded. Please check your account.";
+      } else if (error.status === 401) {
+        errorMessage = "Invalid OpenAI API key";
+        errorCode = "auth_error";
       }
-      if (error.status === 401) {
-        throw new Error("Invalid OpenAI API key");
-      }
+
+      onEvent({
+        type: "error",
+        error: errorMessage,
+        code: errorCode,
+      });
+
       throw new Error(`OpenAI API error: ${error.message}`);
     }
   }
@@ -106,6 +227,22 @@ export class OpenAiClient extends AiClient {
         return config.openai.models.xlarge;
       default:
         return config.openai.models.small;
+    }
+  }
+
+  private getReasoningEffortForTier(
+    reasoningEffort: "none" | "low" | "medium" | "high"
+  ): string {
+    switch (reasoningEffort) {
+      case "none":
+      case "low":
+        return "minimal";
+      case "medium":
+        return "low";
+      case "high":
+        return "medium";
+      default:
+        return "low";
     }
   }
 }
