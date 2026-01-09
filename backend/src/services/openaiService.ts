@@ -27,11 +27,10 @@ CRITICAL RULES:
 - Use CSG operations (union, difference, intersection) when appropriate`;
 
     try {
-      const stream = await this.client.responses.create({
+      const stream = this.client.responses.stream({
         model: "gpt-5",
         instructions: systemPrompt,
         input: prompt,
-        stream: true,
       });
 
       for await (const event of stream) {
