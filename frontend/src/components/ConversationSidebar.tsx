@@ -70,11 +70,19 @@ export function ConversationSidebar({
           <ul className="py-2">
             {conversations.map((conv) => (
               <li key={conv.id}>
-                <button
+                <div
                   onClick={() => onSelectConversation(conv.id)}
-                  className={`w-full px-4 py-3 text-left hover:bg-slate-800 transition-colors group ${
+                  className={`w-full px-4 py-3 text-left hover:bg-slate-800 transition-colors group cursor-pointer ${
                     activeConversationId === conv.id ? "bg-slate-800" : ""
                   }`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectConversation(conv.id);
+                    }
+                  }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -109,7 +117,7 @@ export function ConversationSidebar({
                       </svg>
                     </button>
                   </div>
-                </button>
+                </div>
               </li>
             ))}
           </ul>
