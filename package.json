@@ -11,6 +11,8 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
+    "postgres:up": "npm run postgres:up --workspace=backend",
+    "postgres:down": "npm run postgres:down --workspace=backend",
     "build": "npm run build --workspaces",
     "type-check": "npm run type-check --workspaces"
   },

@@ -1,86 +1,113 @@
-import { PromptInput } from './components/PromptInput';
-import { ModelViewer } from './components/ModelViewer';
-import { ErrorDisplay } from './components/ErrorDisplay';
-import { StreamingCodeDisplay } from './components/StreamingCodeDisplay';
-import { useModelGeneration } from './hooks/useModelGeneration';
+import { PromptInput } from "./components/PromptInput";
+import { ModelViewer } from "./components/ModelViewer";
+import { ErrorDisplay } from "./components/ErrorDisplay";
+import { StreamingCodeDisplay } from "./components/StreamingCodeDisplay";
+import { ConversationSidebar } from "./components/ConversationSidebar";
+import { ConversationView } from "./components/ConversationView";
+import { useConversations } from "./hooks/useConversations";
 
 export default function App() {
-  const { generateModel, loading, error, model, streaming, clearError } = useModelGeneration();
+  const {
+    conversations,
+    activeConversation,
+    loading,
+    error,
+    streaming,
+    fetchConversations,
+    loadConversation,
+    startNewConversation,
+    addMessage,
+    deleteConversation,
+    clearError,
+  } = useConversations();
 
-  const isStreaming = loading && streaming.status !== 'idle';
+  const isStreaming = loading && streaming.status !== "idle";
+  const hasActiveConversation = !!activeConversation;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4">
-      <div className="max-w-6xl mx-auto">
-        <header className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-900 mb-3">
-            OpenSCAD AI Model Generator
-          </h1>
-          <p className="text-lg text-gray-600">
-            Describe your 3D model and watch AI create it in real-time
-          </p>
-        </header>
+    <div className="flex h-screen bg-slate-100">
+      {/* Sidebar */}
+      <ConversationSidebar
+        conversations={conversations}
+        activeConversationId={activeConversation?.id}
+        onSelectConversation={loadConversation}
+        onNewConversation={startNewConversation}
+        onDeleteConversation={deleteConversation}
+        onRefresh={fetchConversations}
+      />
 
-        <div className="space-y-8">
-          <PromptInput onSubmit={generateModel} loading={loading} />
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto py-8 px-6">
+          <header className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">
+              OpenSCAD AI Model Generator
+            </h1>
+            <p className="text-slate-600">
+              {hasActiveConversation
+                ? "Add follow-up prompts to refine your model"
+                : "Describe your 3D model and watch AI create it in real-time"}
+            </p>
+          </header>
 
-          {error && <ErrorDisplay message={error} onDismiss={clearError} />}
-
-          {isStreaming && <StreamingCodeDisplay streaming={streaming} />}
-
-          {model && streaming.status === 'completed' && (
-            <div className="bg-white rounded-lg shadow-xl p-8 space-y-6">
-              <div>
-                <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                  Generated 3D Model
-                </h2>
-                <p className="text-gray-600 mb-4">
-                  <strong>Your prompt:</strong> {model.prompt}
-                </p>
-                <ModelViewer modelUrl={model.modelUrl} />
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Generated OpenSCAD Code
-                </h3>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto">
-                  <code>{model.scadCode}</code>
-                </pre>
-              </div>
-
-              <div className="flex gap-4">
-                <a
-                  href={model.modelUrl}
-                  download={`model-${model.id}.${model.format}`}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                >
-                  Download {model.format.toUpperCase()}
-                </a>
-                <button
-                  onClick={() => {
-                    const blob = new Blob([model.scadCode], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `model-${model.id}.scad`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                  Download .scad
-                </button>
-              </div>
+          <div className="space-y-6">
+            {/* Prompt Input */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <PromptInput
+                onSubmit={addMessage}
+                loading={loading}
+                isFollowUp={hasActiveConversation}
+              />
             </div>
-          )}
-        </div>
 
-        <footer className="mt-16 text-center text-gray-500 text-sm">
-          <p>
-            Powered by OpenAI GPT-4 and OpenSCAD • Real-time streaming
-          </p>
-        </footer>
+            {/* Error Display */}
+            {error && <ErrorDisplay message={error} onDismiss={clearError} />}
+
+            {/* Streaming Display */}
+            {isStreaming && <StreamingCodeDisplay streaming={streaming} />}
+
+            {/* Conversation View (when completed) */}
+            {activeConversation &&
+              streaming.status !== "generating" &&
+              streaming.status !== "compiling" && (
+                <ConversationView conversation={activeConversation} />
+              )}
+
+            {/* Empty State */}
+            {!hasActiveConversation && !isStreaming && (
+              <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+                <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-10 w-10 text-emerald-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                    />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-semibold text-slate-800 mb-2">
+                  Create Your First Model
+                </h2>
+                <p className="text-slate-600 max-w-md mx-auto">
+                  Describe the 3D model you want to create in the text box
+                  above. The AI will generate OpenSCAD code and compile it into
+                  a downloadable 3D model.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <footer className="mt-12 text-center text-slate-500 text-sm">
+            <p>Powered by OpenAI GPT and OpenSCAD • Real-time streaming</p>
+          </footer>
+        </div>
       </div>
     </div>
   );

@@ -1,58 +1,83 @@
-import { useState } from 'react';
+import { useState } from "react";
 
 interface PromptInputProps {
   onSubmit: (prompt: string) => void;
   loading: boolean;
+  isFollowUp?: boolean;
 }
 
-export function PromptInput({ onSubmit, loading }: PromptInputProps) {
-  const [prompt, setPrompt] = useState('');
+export function PromptInput({
+  onSubmit,
+  loading,
+  isFollowUp = false,
+}: PromptInputProps) {
+  const [prompt, setPrompt] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (prompt.trim()) {
       onSubmit(prompt);
+      setPrompt("");
     }
   };
 
-  const examples = [
-    'Create a cube with 20mm sides',
-    'Make a sphere with radius 15mm',
-    'Design a cylinder 30mm tall and 10mm in diameter',
-    'Create a pyramid with a square base',
+  const newModelExamples = [
+    "Create a cube with 20mm sides",
+    "Make a sphere with radius 15mm",
+    "Design a cylinder 30mm tall and 10mm in diameter",
+    "Create a pyramid with a square base",
   ];
 
+  const followUpExamples = [
+    "Make it twice as large",
+    "Add a hole through the center",
+    "Round the edges",
+    "Add a base underneath",
+  ];
+
+  const examples = isFollowUp ? followUpExamples : newModelExamples;
+
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe the 3D model you want to create..."
-            className="w-full p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={4}
+            placeholder={
+              isFollowUp
+                ? "Describe how you want to modify the model..."
+                : "Describe the 3D model you want to create..."
+            }
+            className="w-full p-4 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+            rows={3}
             disabled={loading}
           />
         </div>
         <button
           type="submit"
           disabled={loading || !prompt.trim()}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
+          className="px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors font-medium"
         >
-          {loading ? 'Generating...' : 'Generate 3D Model'}
+          {loading
+            ? "Generating..."
+            : isFollowUp
+            ? "Update Model"
+            : "Generate 3D Model"}
         </button>
       </form>
 
-      <div className="mt-6">
-        <p className="text-sm text-gray-600 mb-2">Example prompts:</p>
+      <div className="mt-4">
+        <p className="text-sm text-slate-600 mb-2">
+          {isFollowUp ? "Modification ideas:" : "Example prompts:"}
+        </p>
         <div className="flex flex-wrap gap-2">
           {examples.map((example, index) => (
             <button
               key={index}
               onClick={() => setPrompt(example)}
               disabled={loading}
-              className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {example}
             </button>

@@ -1,16 +1,18 @@
 import OpenAI from "openai";
+import { Message } from "../../../shared/src/types/model";
+
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export class OpenAIService {
   private client: OpenAI;
+  private systemPrompt: string;
 
   constructor(apiKey: string) {
     this.client = new OpenAI({ apiKey });
-  }
-
-  async *generateOpenSCADCodeStream(
-    prompt: string
-  ): AsyncGenerator<string, void, unknown> {
-    const systemPrompt = `You are an expert OpenSCAD programmer. Generate ONLY valid OpenSCAD code based on user descriptions.
+    this.systemPrompt = `You are an expert OpenSCAD programmer. Generate ONLY valid OpenSCAD code based on user descriptions.
 
 CRITICAL RULES:
 - Output PURE OpenSCAD code ONLY
@@ -24,12 +26,86 @@ CRITICAL RULES:
 - Ensure the code will successfully compile
 - Use standard OpenSCAD primitives: cube, sphere, cylinder, etc.
 - Apply transformations (translate, rotate, scale) as needed
-- Use CSG operations (union, difference, intersection) when appropriate`;
+- Use CSG operations (union, difference, intersection) when appropriate
+
+When modifying existing code based on follow-up requests:
+- Take the previous OpenSCAD code into account
+- Apply the requested modifications while keeping the rest of the design intact
+- Output the complete, updated OpenSCAD code`;
+  }
+
+  /**
+   * Generate OpenSCAD code with conversation history for context
+   */
+  async *generateOpenSCADCodeStreamWithHistory(
+    messages: Message[]
+  ): AsyncGenerator<string, void, unknown> {
+    // Build conversation input from message history
+    const conversationInput = this.buildConversationInput(messages);
 
     try {
       const stream = this.client.responses.stream({
         model: "gpt-5",
-        instructions: systemPrompt,
+        instructions: this.systemPrompt,
+        input: conversationInput,
+      });
+
+      for await (const event of stream) {
+        if (event.type === "response.output_text.delta" && event.delta) {
+          yield event.delta;
+        }
+      }
+    } catch (error: any) {
+      if (error.code === "insufficient_quota") {
+        throw new Error(
+          "OpenAI API quota exceeded. Please check your account."
+        );
+      }
+      if (error.status === 401) {
+        throw new Error("Invalid OpenAI API key");
+      }
+      throw new Error(`OpenAI API error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Build conversation input from message history
+   * Includes both user prompts and assistant's generated code for context
+   */
+  private buildConversationInput(messages: Message[]): string {
+    if (messages.length === 0) {
+      throw new Error("No messages provided");
+    }
+
+    // For a single message, just return the prompt
+    if (messages.length === 1) {
+      return messages[0].content;
+    }
+
+    // Build context from conversation history
+    const parts: string[] = [];
+
+    for (const msg of messages) {
+      if (msg.role === "user") {
+        parts.push(`User request: ${msg.content}`);
+      } else if (msg.role === "assistant" && msg.scadCode) {
+        parts.push(`Previous OpenSCAD code:\n${msg.scadCode}`);
+      }
+    }
+
+    return parts.join("\n\n");
+  }
+
+  /**
+   * Legacy method for single prompt generation (streaming)
+   */
+  async *generateOpenSCADCodeStream(
+    prompt: string
+  ): AsyncGenerator<string, void, unknown> {
+    try {
+      const stream = this.client.responses.stream({
+        model: "gpt-5",
+        instructions: this.systemPrompt,
         input: prompt,
       });
 
@@ -59,7 +135,7 @@ CRITICAL RULES:
     return this.cleanCode(code);
   }
 
-  private cleanCode(code: string): string {
+  cleanCode(code: string): string {
     let cleaned = code.trim();
 
     if (cleaned.startsWith("```openscad")) {
