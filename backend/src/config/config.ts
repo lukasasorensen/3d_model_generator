@@ -22,6 +22,13 @@ export interface Config {
   };
   openai: {
     apiKey: string;
+    models: {
+      tiny: string;
+      small: string;
+      medium: string;
+      large: string;
+      xlarge: string;
+    };
   };
 }
 
@@ -47,5 +54,12 @@ export const config: Config = {
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || "",
+    models: {
+      tiny: process.env.OPENAI_MODEL_TINY || "gpt-4.1-nano",
+      small: process.env.OPENAI_MODEL_SMALL || "gpt-5-nano",
+      medium: process.env.OPENAI_MODEL_MEDIUM || "gpt-5-mini",
+      large: process.env.OPENAI_MODEL_LARGE || "gpt-5",
+      xlarge: process.env.OPENAI_MODEL_XLARGE || "gpt-5",
+    },
   },
 };

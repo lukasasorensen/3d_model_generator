@@ -1,6 +1,7 @@
 import OpenAI from "openai";
-import { AiClient, InputMessage } from "./aiClient";
+import { AiClient, InputMessage, StreamCompletionParams } from "./aiClient";
 import { logger } from "../infrastructure/logger/logger";
+import { config } from "../config/config";
 
 /**
  * OpenAI implementation of the AI client.
@@ -35,10 +36,11 @@ export class OpenAiClient extends AiClient {
    * @param messages - Array of conversation messages
    * @yields Chunks of generated text
    */
-  async *streamCompletion(
-    systemPrompt: string,
-    messages: InputMessage[]
-  ): AsyncGenerator<string, void, unknown> {
+  async *streamCompletion({
+    systemPrompt,
+    messages,
+    modelTier = "small",
+  }: StreamCompletionParams): AsyncGenerator<string, void, unknown> {
     logger.debug("Starting streaming completion", {
       systemPromptLength: systemPrompt.length,
       messageCount: messages.length,
@@ -48,7 +50,7 @@ export class OpenAiClient extends AiClient {
       const openAiInput = this.convertToOpenAiInput(messages);
 
       const stream = this.client.responses.stream({
-        model: "gpt-5-nano",
+        model: this.getModelForTier(modelTier ?? "small"),
         instructions: systemPrompt,
         input: openAiInput,
       });
@@ -85,6 +87,25 @@ export class OpenAiClient extends AiClient {
         throw new Error("Invalid OpenAI API key");
       }
       throw new Error(`OpenAI API error: ${error.message}`);
+    }
+  }
+
+  private getModelForTier(
+    modelTier: "tiny" | "small" | "medium" | "large" | "xlarge"
+  ): string {
+    switch (modelTier) {
+      case "tiny":
+        return config.openai.models.tiny;
+      case "small":
+        return config.openai.models.small;
+      case "medium":
+        return config.openai.models.medium;
+      case "large":
+        return config.openai.models.large;
+      case "xlarge":
+        return config.openai.models.xlarge;
+      default:
+        return config.openai.models.small;
     }
   }
 }

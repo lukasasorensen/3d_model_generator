@@ -50,10 +50,10 @@ When modifying existing code based on follow-up requests:
     let totalChunks = 0;
     let totalLength = 0;
 
-    for await (const chunk of this.aiClient.streamCompletion(
-      this.systemPrompt,
-      inputMessages
-    )) {
+    for await (const chunk of this.aiClient.streamCompletion({
+      systemPrompt: this.systemPrompt,
+      messages: inputMessages,
+    })) {
       totalChunks++;
       totalLength += chunk.length;
       yield chunk;
@@ -117,10 +117,10 @@ When modifying existing code based on follow-up requests:
     let totalChunks = 0;
     let totalLength = 0;
 
-    for await (const chunk of this.aiClient.streamCompletion(
-      this.systemPrompt,
-      inputMessages
-    )) {
+    for await (const chunk of this.aiClient.streamCompletion({
+      systemPrompt: this.systemPrompt,
+      messages: inputMessages,
+    })) {
       totalChunks++;
       totalLength += chunk.length;
       yield chunk;
