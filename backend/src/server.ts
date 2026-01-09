@@ -1,33 +1,33 @@
-import "dotenv/config";
 import { createApp } from "./app";
 import { OpenSCADService } from "./services/openscadService";
 import * as path from "path";
+import { config } from "./config/config";
 
-const PORT = process.env.PORT || 3001;
+const PORT = config.server.port;
 
 function buildDatabaseUrl(): string {
-  const host = process.env.POSTGRES_HOST;
-  const port = process.env.POSTGRES_PORT || "5432";
-  const user = process.env.POSTGRES_USERNAME;
-  const password = process.env.POSTGRES_PASSWORD;
-  const database = process.env.POSTGRES_DB;
+  const host = config.db.host;
+  const port = config.db.port;
+  const user = config.db.username;
+  const password = config.db.password;
+  const database = config.db.database;
 
   const missingVars: string[] = [];
-  if (!host) missingVars.push("POSTGRES_HOST");
-  if (!user) missingVars.push("POSTGRES_USERNAME");
-  if (!password) missingVars.push("POSTGRES_PASSWORD");
-  if (!database) missingVars.push("POSTGRES_DB");
+  if (!host) missingVars.push("db.host");
+  if (!user) missingVars.push("db.username");
+  if (!password) missingVars.push("db.password");
+  if (!database) missingVars.push("db.database");
 
   if (missingVars.length > 0) {
     console.error("ERROR: Missing required database environment variables:");
     missingVars.forEach((v) => console.error(`  - ${v}`));
     console.error("");
     console.error("Please set the following in backend/.env:");
-    console.error("  POSTGRES_HOST=localhost");
+    console.error("  db.host=localhost");
     console.error("  POSTGRES_PORT=5432 (optional, defaults to 5432)");
-    console.error("  POSTGRES_USERNAME=ai_openscad");
-    console.error("  POSTGRES_PASSWORD=ai_openscad_dev");
-    console.error("  POSTGRES_DB=ai_openscad");
+    console.error("  db.username=ai_openscad");
+    console.error("  db.password=ai_openscad_dev");
+    console.error("  db.database=ai_openscad");
     process.exit(1);
   }
 
@@ -35,14 +35,14 @@ function buildDatabaseUrl(): string {
 }
 
 async function startServer() {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!config.openai.apiKey) {
     console.error("ERROR: OPENAI_API_KEY environment variable is not set");
     console.error("Please set your OpenAI API key in backend/.env");
     process.exit(1);
   }
 
   // Build DATABASE_URL from individual components for Prisma
-  process.env.DATABASE_URL = buildDatabaseUrl();
+  config.db.url = buildDatabaseUrl();
 
   const openscadService = new OpenSCADService(
     path.join(__dirname, "../generated")

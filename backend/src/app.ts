@@ -11,6 +11,7 @@ import { ConversationService } from "./services/conversationService";
 import { ModelController } from "./controllers/modelController";
 import { ConversationController } from "./controllers/conversationController";
 import * as path from "path";
+import { config } from "./config/config";
 
 export function createApp() {
   const app = express();
@@ -19,7 +20,7 @@ export function createApp() {
   app.use(cors());
   app.use(express.json());
 
-  const openaiService = new OpenAIService(process.env.OPENAI_API_KEY!);
+  const openaiService = new OpenAIService(config.openai.apiKey);
   const openscadService = new OpenSCADService(
     path.join(__dirname, "../generated")
   );
