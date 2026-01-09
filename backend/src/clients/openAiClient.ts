@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { AiClient } from "./aiClient";
+import { AiClient, InputMessage } from "./aiClient";
 import { logger } from "../infrastructure/logger/logger";
 
 /**
@@ -17,31 +17,47 @@ export class OpenAiClient extends AiClient {
   }
 
   /**
+   * Convert generic InputMessage array to OpenAI's input format.
+   * OpenAI Responses API uses an array of input items with type and content.
+   */
+  private convertToOpenAiInput(
+    messages: InputMessage[]
+  ): Array<{ role: "user" | "assistant" | "system"; content: string }> {
+    return messages.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+  }
+
+  /**
    * Stream a completion from the OpenAI API.
    * @param systemPrompt - The system instructions for the AI
-   * @param input - The user input/prompt
+   * @param messages - Array of conversation messages
    * @yields Chunks of generated text
    */
   async *streamCompletion(
     systemPrompt: string,
-    input: string
+    messages: InputMessage[]
   ): AsyncGenerator<string, void, unknown> {
     logger.debug("Starting streaming completion", {
       systemPromptLength: systemPrompt.length,
-      inputLength: input.length,
+      messageCount: messages.length,
     });
 
     try {
+      const openAiInput = this.convertToOpenAiInput(messages);
+
       const stream = this.client.responses.stream({
-        model: "gpt-5",
+        model: "gpt-5-nano",
         instructions: systemPrompt,
-        input: input,
+        input: openAiInput,
       });
 
       let totalChunks = 0;
       let totalLength = 0;
 
       for await (const event of stream) {
+        logger.debug("OpenAI event", { event });
         if (event.type === "response.output_text.delta" && event.delta) {
           totalChunks++;
           totalLength += event.delta.length;

@@ -1,4 +1,4 @@
-import { AiClient } from "../clients/aiClient";
+import { AiClient, InputMessage } from "../clients/aiClient";
 import { Message } from "../../../shared/src/types/model";
 import { logger } from "../infrastructure/logger/logger";
 
@@ -41,10 +41,10 @@ When modifying existing code based on follow-up requests:
   async *generateOpenSCADCodeStreamWithHistory(
     messages: Message[]
   ): AsyncGenerator<string, void, unknown> {
-    const conversationInput = this.buildConversationInput(messages);
+    const inputMessages = this.buildInputMessages(messages);
     logger.info("Starting streaming code generation with history", {
       messageCount: messages.length,
-      inputLength: conversationInput.length,
+      inputMessageCount: inputMessages.length,
     });
 
     let totalChunks = 0;
@@ -52,7 +52,7 @@ When modifying existing code based on follow-up requests:
 
     for await (const chunk of this.aiClient.streamCompletion(
       this.systemPrompt,
-      conversationInput
+      inputMessages
     )) {
       totalChunks++;
       totalLength += chunk.length;
@@ -66,41 +66,40 @@ When modifying existing code based on follow-up requests:
   }
 
   /**
-   * Build conversation input from message history
+   * Build input messages from conversation history
    * Includes both user prompts and assistant's generated code for context
    */
-  private buildConversationInput(messages: Message[]): string {
+  private buildInputMessages(messages: Message[]): InputMessage[] {
     if (messages.length === 0) {
       logger.error("No messages provided for conversation input");
       throw new Error("No messages provided");
     }
 
-    // For a single message, just return the prompt
-    if (messages.length === 1) {
-      logger.debug("Building conversation input for single message");
-      return messages[0].content;
-    }
-
-    // Build context from conversation history
-    logger.debug("Building conversation input from message history", {
+    logger.debug("Building input messages from conversation history", {
       messageCount: messages.length,
     });
-    const parts: string[] = [];
+
+    const inputMessages: InputMessage[] = [];
 
     for (const msg of messages) {
       if (msg.role === "user") {
-        parts.push(`User request: ${msg.content}`);
+        inputMessages.push({
+          role: "user",
+          content: msg.content,
+        });
       } else if (msg.role === "assistant" && msg.scadCode) {
-        parts.push(`Previous OpenSCAD code:\n${msg.scadCode}`);
+        inputMessages.push({
+          role: "assistant",
+          content: msg.scadCode,
+        });
       }
     }
 
-    const input = parts.join("\n\n");
-    logger.debug("Conversation input built", {
-      partsCount: parts.length,
-      inputLength: input.length,
+    logger.debug("Input messages built", {
+      inputMessageCount: inputMessages.length,
     });
-    return input;
+
+    return inputMessages;
   }
 
   /**
@@ -113,12 +112,14 @@ When modifying existing code based on follow-up requests:
       promptLength: prompt.length,
     });
 
+    const inputMessages: InputMessage[] = [{ role: "user", content: prompt }];
+
     let totalChunks = 0;
     let totalLength = 0;
 
     for await (const chunk of this.aiClient.streamCompletion(
       this.systemPrompt,
-      prompt
+      inputMessages
     )) {
       totalChunks++;
       totalLength += chunk.length;
