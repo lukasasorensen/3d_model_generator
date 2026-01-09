@@ -12,8 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "postgres:up": "docker-compose -f docker-compose.yml up -d",
-    "postgres:down": "docker-compose -f docker-compose.yml down"
+    "db:up": "docker-compose -f docker-compose.yml up -d",
+    "db:down": "docker-compose -f docker-compose.yml down"
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",

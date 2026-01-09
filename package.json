@@ -13,14 +13,13 @@
     "dev:backend": "npm run dev --workspace=backend",
     "build": "npm run build --workspaces",
     "type-check": "npm run type-check --workspaces",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d",
-    "db:logs": "docker compose logs -f postgres",
+    "db:up": "npm run db:up --workspace=backend",
+    "db:down": "npm run db:down --workspace=backend",
+    "db:reset": "npm run db:reset --workspace=backend",
+    "db:logs": "npm run db:logs --workspace=backend",
     "db:generate": "npm run db:generate --workspace=backend",
     "db:migrate": "npm run db:migrate --workspace=backend",
-    "db:push": "npm run db:push --workspace=backend",
-    "db:studio": "npm run db:studio --workspace=backend"
+    "db:push": "npm run db:push --workspace=backend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
