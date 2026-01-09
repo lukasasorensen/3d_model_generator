@@ -1,11 +1,13 @@
 import { PromptInput } from './components/PromptInput';
 import { ModelViewer } from './components/ModelViewer';
 import { ErrorDisplay } from './components/ErrorDisplay';
-import { LoadingSpinner } from './components/LoadingSpinner';
+import { StreamingCodeDisplay } from './components/StreamingCodeDisplay';
 import { useModelGeneration } from './hooks/useModelGeneration';
 
 export default function App() {
-  const { generateModel, loading, error, model, clearError } = useModelGeneration();
+  const { generateModel, loading, error, model, streaming, clearError } = useModelGeneration();
+
+  const isStreaming = loading && streaming.status !== 'idle';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4">
@@ -15,18 +17,18 @@ export default function App() {
             OpenSCAD AI Model Generator
           </h1>
           <p className="text-lg text-gray-600">
-            Describe your 3D model and watch AI create it using OpenSCAD
+            Describe your 3D model and watch AI create it in real-time
           </p>
         </header>
 
         <div className="space-y-8">
           <PromptInput onSubmit={generateModel} loading={loading} />
 
-          {loading && <LoadingSpinner />}
-
           {error && <ErrorDisplay message={error} onDismiss={clearError} />}
 
-          {model && !loading && (
+          {isStreaming && <StreamingCodeDisplay streaming={streaming} />}
+
+          {model && streaming.status === 'completed' && (
             <div className="bg-white rounded-lg shadow-xl p-8 space-y-6">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 mb-4">
@@ -76,7 +78,7 @@ export default function App() {
 
         <footer className="mt-16 text-center text-gray-500 text-sm">
           <p>
-            Powered by OpenAI GPT-4 and OpenSCAD
+            Powered by OpenAI GPT-4 and OpenSCAD • Real-time streaming
           </p>
         </footer>
       </div>
