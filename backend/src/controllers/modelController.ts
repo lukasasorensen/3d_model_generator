@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { OpenAIService } from "../services/openaiService";
+import { OpenScadAiService } from "../services/openScadAiService";
 import { OpenSCADService } from "../services/openscadService";
 import { FileStorageService } from "../services/fileStorageService";
 import { ModelGenerationRequest } from "../../../shared/src/types/model";
@@ -7,7 +7,7 @@ import { logger } from "../infrastructure/logger/logger";
 
 export class ModelController {
   constructor(
-    private openaiService: OpenAIService,
+    private openScadAiService: OpenScadAiService,
     private openscadService: OpenSCADService,
     private fileStorage: FileStorageService
   ) {
@@ -67,7 +67,7 @@ export class ModelController {
 
       logger.info("Starting OpenSCAD code generation");
       let chunkCount = 0;
-      for await (const chunk of this.openaiService.generateOpenSCADCodeStream(
+      for await (const chunk of this.openScadAiService.generateOpenSCADCodeStream(
         prompt
       )) {
         scadCode += chunk;
@@ -184,7 +184,9 @@ export class ModelController {
       }
 
       logger.info("Generating OpenSCAD code");
-      const scadCode = await this.openaiService.generateOpenSCADCode(prompt);
+      const scadCode = await this.openScadAiService.generateOpenSCADCode(
+        prompt
+      );
       logger.info("Code generation completed", { codeLength: scadCode.length });
 
       const { id, filePath: scadPath } = await this.fileStorage.saveScadFile(

@@ -4,7 +4,8 @@ import { PrismaClient } from "@prisma/client";
 import { createModelRoutes } from "./routes/models";
 import { createConversationRoutes } from "./routes/conversations";
 import { errorHandler } from "./middleware/errorHandler";
-import { OpenAIService } from "./services/openaiService";
+import { OpenAiClient } from "./clients/openAiClient";
+import { OpenScadAiService } from "./services/openScadAiService";
 import { OpenSCADService } from "./services/openscadService";
 import { FileStorageService } from "./services/fileStorageService";
 import { ConversationService } from "./services/conversationService";
@@ -80,7 +81,8 @@ export function createApp() {
   app.use(requestLogger);
 
   logger.debug("Creating services");
-  const openaiService = new OpenAIService(config.openai.apiKey);
+  const openAiClient = new OpenAiClient(config.openai.apiKey);
+  const openScadAiService = new OpenScadAiService(openAiClient);
   const openscadService = new OpenSCADService(
     path.join(__dirname, "../generated")
   );
@@ -94,13 +96,13 @@ export function createApp() {
 
   logger.debug("Creating controllers");
   const modelController = new ModelController(
-    openaiService,
+    openScadAiService,
     openscadService,
     fileStorage
   );
   const conversationController = new ConversationController(
     conversationService,
-    openaiService,
+    openScadAiService,
     openscadService,
     fileStorage
   );

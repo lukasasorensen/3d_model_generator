@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { ConversationService } from "../services/conversationService";
-import { OpenAIService } from "../services/openaiService";
+import { OpenScadAiService } from "../services/openScadAiService";
 import { OpenSCADService } from "../services/openscadService";
 import { FileStorageService } from "../services/fileStorageService";
 import {
@@ -12,7 +12,7 @@ import { logger } from "../infrastructure/logger/logger";
 export class ConversationController {
   constructor(
     private conversationService: ConversationService,
-    private openaiService: OpenAIService,
+    private openScadAiService: OpenScadAiService,
     private openscadService: OpenSCADService,
     private fileStorage: FileStorageService
   ) {
@@ -159,7 +159,7 @@ export class ConversationController {
       });
       let scadCode = "";
       let chunkCount = 0;
-      for await (const chunk of this.openaiService.generateOpenSCADCodeStreamWithHistory(
+      for await (const chunk of this.openScadAiService.generateOpenSCADCodeStreamWithHistory(
         messages
       )) {
         scadCode += chunk;
@@ -172,7 +172,7 @@ export class ConversationController {
         chunkCount,
       });
 
-      scadCode = this.openaiService.cleanCode(scadCode);
+      scadCode = this.openScadAiService.cleanCode(scadCode);
       res.write(
         `data: ${JSON.stringify({ type: "code_complete", code: scadCode })}\n\n`
       );
@@ -345,7 +345,7 @@ export class ConversationController {
       });
       let scadCode = "";
       let chunkCount = 0;
-      for await (const chunk of this.openaiService.generateOpenSCADCodeStreamWithHistory(
+      for await (const chunk of this.openScadAiService.generateOpenSCADCodeStreamWithHistory(
         messages
       )) {
         scadCode += chunk;
@@ -358,7 +358,7 @@ export class ConversationController {
         chunkCount,
       });
 
-      scadCode = this.openaiService.cleanCode(scadCode);
+      scadCode = this.openScadAiService.cleanCode(scadCode);
       res.write(
         `data: ${JSON.stringify({ type: "code_complete", code: scadCode })}\n\n`
       );
