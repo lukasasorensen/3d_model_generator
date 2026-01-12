@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { apiClient, ConversationStreamEvent } from "../api/client";
-import { Conversation, ConversationListItem, Message } from "../types";
+import { Conversation, ConversationListItem } from "../types";
 
 export interface StreamingState {
   status: "idle" | "generating" | "compiling" | "completed" | "error";

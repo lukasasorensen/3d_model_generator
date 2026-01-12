@@ -1,5 +1,4 @@
 import { PromptInput } from "./components/PromptInput";
-import { ModelViewer } from "./components/ModelViewer";
 import { ErrorDisplay } from "./components/ErrorDisplay";
 import { StreamingCodeDisplay } from "./components/StreamingCodeDisplay";
 import { ConversationSidebar } from "./components/ConversationSidebar";
