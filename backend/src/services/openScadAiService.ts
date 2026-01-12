@@ -87,126 +87,12 @@ export class OpenScadAiService {
 
   constructor(private aiClient: AiClient) {
     logger.debug("Initializing OpenScadAiService");
-    this.systemPrompt = `You are an expert OpenSCAD programmer. Generate ONLY valid OpenSCAD code based on user descriptions.
-
-CRITICAL RULES:
-- Output PURE OpenSCAD code ONLY
-- NO markdown code blocks (no \`\`\` markers)
-- NO explanations before or after the code
-- NO text like "Here is..." or "This code..."
-- Start directly with OpenSCAD code
-- End with the last line of OpenSCAD code
-- Use appropriate dimensions in millimeters
-- Add inline // comments ONLY when necessary for clarity
-- Ensure the code will successfully compile
-- Use standard OpenSCAD primitives: cube, sphere, cylinder, etc.
-- Apply transformations (translate, rotate, scale) as needed
-- Use CSG operations (union, difference, intersection) when appropriate
-
-When modifying existing code based on follow-up requests:
-- Take the previous OpenSCAD code into account
-- Apply the requested modifications while keeping the rest of the design intact
-- Output the complete, updated OpenSCAD code`;
+    
 
     logger.debug("OpenScadAiService initialized");
   }
 
-  /**
-   * Generate OpenSCAD code with conversation history using event-based streaming
-   * @param messages - Array of conversation messages
-   * @param onEvent - Callback function called for each stream event
-   * @returns Promise that resolves with the complete generated code
-   */
-  async generateCode(
-    messages: Message[],
-    onEvent: OpenScadStreamEventHandler
-  ): Promise<string> {
-    const inputMessages = this.buildInputMessages(messages);
-    logger.info("Starting streaming code generation", {
-      messageCount: messages.length,
-      inputMessageCount: inputMessages.length,
-    });
-
-    let accumulatedCode = "";
-    let totalChunks = 0;
-
-    await this.aiClient.streamCompletion(
-      {
-        systemPrompt: this.systemPrompt,
-        messages: inputMessages,
-        modelTier: "medium",
-        reasoningEffort: "none",
-      },
-      (event: StreamEvent) => {
-        switch (event.type) {
-          case "text_delta":
-            accumulatedCode += event.delta;
-            totalChunks++;
-            onEvent({
-              type: "code_delta",
-              delta: event.delta,
-            });
-            break;
-
-          case "reasoning_delta":
-            onEvent({
-              type: "reasoning_delta",
-              delta: event.delta,
-            });
-            break;
-
-          case "tool_call_start":
-            onEvent({
-              type: "tool_call_start",
-              toolCallId: event.toolCallId,
-              toolName: event.toolName,
-            });
-            break;
-
-          case "tool_call_delta":
-            onEvent({
-              type: "tool_call_delta",
-              toolCallId: event.toolCallId,
-              argumentsDelta: event.argumentsDelta,
-            });
-            break;
-
-          case "tool_call_end":
-            onEvent({
-              type: "tool_call_end",
-              toolCallId: event.toolCallId,
-              arguments: event.arguments,
-            });
-            break;
-
-          case "done":
-            // Clean the code before sending done event
-            const cleanedCode = this.cleanCode(accumulatedCode);
-            onEvent({
-              type: "done",
-              totalCode: cleanedCode,
-              usage: event.usage,
-            });
-            break;
-
-          case "error":
-            onEvent({
-              type: "error",
-              error: event.error,
-              code: event.code,
-            });
-            break;
-        }
-      }
-    );
-
-    logger.info("Streaming code generation completed", {
-      totalChunks,
-      totalLength: accumulatedCode.length,
-    });
-
-    return this.cleanCode(accumulatedCode);
-  }
+ 
 
   /**
    * Helper to create a Message array from a single prompt
@@ -228,7 +114,7 @@ When modifying existing code based on follow-up requests:
    * Build input messages from conversation history
    * Includes both user prompts and assistant's generated code for context
    */
-  private buildInputMessages(messages: Message[]): InputMessage[] {
+  public buildInputMessages(messages: Message[]): InputMessage[] {
     if (messages.length === 0) {
       logger.error("No messages provided for conversation input");
       throw new Error("No messages provided");
