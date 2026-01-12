@@ -1,6 +1,7 @@
 export interface ModelGenerationRequest {
   prompt: string;
   format?: "stl" | "3mf";
+  conversationId?: string;
 }
 
 export interface ModelGenerationResponse {
@@ -46,14 +47,4 @@ export interface ConversationListItem {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
-}
-
-export interface CreateConversationRequest {
-  prompt: string;
-  format?: "stl" | "3mf";
-}
-
-export interface AddMessageRequest {
-  prompt: string;
-  format?: "stl" | "3mf";
 }

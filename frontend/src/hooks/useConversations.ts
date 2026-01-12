@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { apiClient, ConversationStreamEvent } from "../api/client";
+import { apiClient, ModelStreamEvent } from "../api/client";
 import { Conversation, ConversationListItem } from "../types";
 
 export interface StreamingState {
@@ -75,9 +75,9 @@ export function useConversations() {
       });
 
       try {
-        await apiClient.createConversation(
+        await apiClient.generateModelStream(
           { prompt, format },
-          (event: ConversationStreamEvent) => {
+          (event: ModelStreamEvent) => {
             handleStreamEvent(event);
           }
         );
@@ -116,10 +116,9 @@ export function useConversations() {
       });
 
       try {
-        await apiClient.addMessage(
-          activeConversation.id,
-          { prompt, format },
-          (event: ConversationStreamEvent) => {
+        await apiClient.generateModelStream(
+          { prompt, format, conversationId: activeConversation.id },
+          (event: ModelStreamEvent) => {
             handleStreamEvent(event);
           }
         );
@@ -140,7 +139,7 @@ export function useConversations() {
     [activeConversation, createConversation, fetchConversations]
   );
 
-  const handleStreamEvent = useCallback((event: ConversationStreamEvent) => {
+  const handleStreamEvent = useCallback((event: ModelStreamEvent) => {
     switch (event.type) {
       case "conversation_created":
         // Conversation created, waiting for generation

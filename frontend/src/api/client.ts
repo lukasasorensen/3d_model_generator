@@ -1,19 +1,16 @@
 import axios from "axios";
 import {
   ModelGenerationRequest,
-  ModelGenerationResponse,
   ApiResponse,
   Conversation,
   ConversationListItem,
   Message,
-  CreateConversationRequest,
-  AddMessageRequest,
 } from "../types";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
 
-export interface StreamEvent {
+export interface ModelStreamEvent {
   type:
     | "generation_start"
     | "code_delta"
@@ -30,44 +27,7 @@ export interface StreamEvent {
   message?: string;
   chunk?: string;
   code?: string;
-  data?:
-    | ModelGenerationResponse
-    | { conversation: Conversation; message: Message };
-  error?: string;
-  conversationId?: string;
-  // Tool call fields
-  toolCallId?: string;
-  toolName?: string;
-  argumentsDelta?: string;
-  arguments?: string;
-  // Usage stats
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-  };
-}
-
-export interface ConversationStreamEvent {
-  type:
-    | "conversation_created"
-    | "generation_start"
-    | "code_delta"
-    | "reasoning_delta"
-    | "tool_call_start"
-    | "tool_call_delta"
-    | "tool_call_end"
-    | "code_complete"
-    | "compiling"
-    | "completed"
-    | "generation_error"
-    | "error";
-  message?: string;
-  chunk?: string;
-  code?: string;
-  data?: {
-    conversation: Conversation;
-    message: Message;
-  };
+  data?: { conversation: Conversation | null; message: Message };
   error?: string;
   conversationId?: string;
   // Tool call fields
@@ -138,7 +98,7 @@ function parseSSEEvents(
 async function streamRequest(
   url: string,
   body: object,
-  onEvent: (event: ConversationStreamEvent) => void
+  onEvent: (event: ModelStreamEvent) => void
 ): Promise<void> {
   const response = await fetch(url, {
     method: "POST",
@@ -168,11 +128,11 @@ async function streamRequest(
       const chunk = decoder.decode(value);
       const events = parseSSEEvents(chunk);
 
-      for (const { eventType, data } of events) {
-        const event: ConversationStreamEvent = {
-          type: eventType as ConversationStreamEvent["type"],
-          ...data,
-        };
+        for (const { eventType, data } of events) {
+          const event: ModelStreamEvent = {
+            type: eventType as ModelStreamEvent["type"],
+            ...data,
+          };
 
         onEvent(event);
 
@@ -187,55 +147,11 @@ async function streamRequest(
 }
 
 export const apiClient = {
-  // Standalone model generation (without conversation history)
   async generateModelStream(
     request: ModelGenerationRequest,
-    onEvent: (event: StreamEvent) => void
+    onEvent: (event: ModelStreamEvent) => void
   ): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/models/generate/stream`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-
-    if (!reader) {
-      throw new Error("No response body");
-    }
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const events = parseSSEEvents(chunk);
-
-        for (const { eventType, data } of events) {
-          const event: StreamEvent = {
-            type: eventType as StreamEvent["type"],
-            ...data,
-          };
-
-          onEvent(event);
-
-          if (event.type === "error" || event.type === "generation_error") {
-            throw new Error(event.error || "Stream error");
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
+    await streamRequest(`${API_BASE_URL}/models/stream`, request, onEvent);
   },
 
   getModelUrl(id: string, format: "stl" | "3mf"): string {
@@ -265,25 +181,6 @@ export const apiClient = {
     }
 
     return response.data.data;
-  },
-
-  async createConversation(
-    request: CreateConversationRequest,
-    onEvent: (event: ConversationStreamEvent) => void
-  ): Promise<void> {
-    await streamRequest(`${API_BASE_URL}/conversations`, request, onEvent);
-  },
-
-  async addMessage(
-    conversationId: string,
-    request: AddMessageRequest,
-    onEvent: (event: ConversationStreamEvent) => void
-  ): Promise<void> {
-    await streamRequest(
-      `${API_BASE_URL}/conversations/${conversationId}/messages/stream`,
-      request,
-      onEvent
-    );
   },
 
   async deleteConversation(id: string): Promise<void> {

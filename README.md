@@ -211,16 +211,17 @@ open-scad-generate-models/
 
 ### Models
 
-#### POST /api/models/generate/stream
+#### POST /api/models/stream
 
-Generate a 3D model from a text prompt (without conversation history).
+Generate or update a 3D model. Provide `conversationId` to update an existing conversation.
 
 **Request:**
 
 ```json
 {
   "prompt": "Create a cube with 20mm sides",
-  "format": "stl"
+  "format": "stl",
+  "conversationId": "optional-conversation-id"
 }
 ```
 
@@ -234,35 +235,9 @@ Download the generated model file.
 
 List all conversations.
 
-#### POST /api/conversations
-
-Create a new conversation with an initial prompt (streaming SSE).
-
-**Request:**
-
-```json
-{
-  "prompt": "Create a cube with 20mm sides",
-  "format": "stl"
-}
-```
-
 #### GET /api/conversations/:id
 
 Get a conversation with all messages.
-
-#### POST /api/conversations/:id/messages/stream
-
-Add a follow-up message to a conversation (streaming SSE).
-
-**Request:**
-
-```json
-{
-  "prompt": "Make it twice as large",
-  "format": "stl"
-}
-```
 
 #### DELETE /api/conversations/:id
 

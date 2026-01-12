@@ -11,6 +11,8 @@ import { FileStorageService } from "./services/fileStorageService";
 import { ConversationService } from "./services/conversationService";
 import { ModelController } from "./controllers/modelController";
 import { ConversationController } from "./controllers/conversationController";
+import { ModelWorkflow } from "./workflows/modelWorkflow";
+import { ConversationWorkflow } from "./workflows/conversationWorkflow";
 import * as path from "path";
 import { config } from "./config/config";
 import { logger } from "./infrastructure/logger/logger";
@@ -94,17 +96,20 @@ export function createApp() {
   const conversationService = new ConversationService(prisma);
   logger.debug("Services created successfully");
 
-  logger.debug("Creating controllers");
-  const modelController = new ModelController(
-    openScadAiService,
-    openscadService,
-    fileStorage
-  );
-  const conversationController = new ConversationController(
+  logger.debug("Creating workflows");
+  const modelWorkflow = new ModelWorkflow(
     conversationService,
     openScadAiService,
     openscadService,
     fileStorage
+  );
+  const conversationWorkflow = new ConversationWorkflow(conversationService);
+  logger.debug("Workflows created successfully");
+
+  logger.debug("Creating controllers");
+  const modelController = new ModelController(modelWorkflow);
+  const conversationController = new ConversationController(
+    conversationWorkflow
   );
   logger.debug("Controllers created successfully");
 

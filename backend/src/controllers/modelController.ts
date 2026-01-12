@@ -1,35 +1,17 @@
 import { Request, Response } from "express";
-import {
-  OpenScadAiService,
-  OpenScadStreamEvent,
-} from "../services/openScadAiService";
-import { OpenSCADService } from "../services/openscadService";
-import { FileStorageService } from "../services/fileStorageService";
 import { ModelGenerationRequest } from "../../../shared/src/types/model";
 import { logger } from "../infrastructure/logger/logger";
-import {
-  SSE_EVENTS,
-  setSseHeaders,
-  writeAiStreamEvent,
-  writeSse,
-} from "../utils/sseUtils";
+import { SSE_EVENTS, setSseHeaders, writeSse } from "../utils/sseUtils";
+import { ModelWorkflow } from "../workflows/modelWorkflow";
 
 export class ModelController {
-  constructor(
-    private openScadAiService: OpenScadAiService,
-    private openscadService: OpenSCADService,
-    private fileStorage: FileStorageService
-  ) {
+  constructor(private modelWorkflow: ModelWorkflow) {
     logger.debug("ModelController initialized");
   }
 
   async generateModelStream(req: Request, res: Response): Promise<void> {
-    const { prompt, format = "stl" } = req.body as ModelGenerationRequest;
-    logger.info("Generating model (streaming)", {
-      promptLength: prompt?.length,
-      format,
-    });
-
+    const { prompt, format = "stl", conversationId } =
+      req.body as ModelGenerationRequest;
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
       logger.warn("Invalid prompt provided for model generation");
       res.status(400).json({
@@ -59,74 +41,38 @@ export class ModelController {
       return;
     }
 
+    if (conversationId !== undefined) {
+      if (typeof conversationId !== "string" || conversationId.trim() === "") {
+        logger.warn("Invalid conversationId provided for model generation");
+        res.status(400).json({
+          success: false,
+          error: "conversationId must be a non-empty string",
+        });
+        return;
+      }
+
+      const conversation = await this.modelWorkflow.getConversation(
+        conversationId
+      );
+      if (!conversation) {
+        res.status(404).json({
+          success: false,
+          error: "Conversation not found",
+        });
+        return;
+      }
+    }
+
     setSseHeaders(res);
     logger.debug("SSE connection established for model generation");
 
     try {
-      writeSse(res, SSE_EVENTS.generationStart, {
-        message: "Generating OpenSCAD code...",
-      });
-
-      logger.info("Starting OpenSCAD code generation");
-      let chunkCount = 0;
-
-      // Create a message array from the prompt for the unified API
-      const messages = this.openScadAiService.createMessagesFromPrompt(prompt);
-
-      const scadCode = await this.openScadAiService.generateCode(
-        messages,
-        (event: OpenScadStreamEvent) => {
-          if (event.type === "code_delta") {
-            chunkCount++;
-          }
-          writeAiStreamEvent(res, event);
-        }
-      );
-
-      logger.info("Code generation completed", {
-        codeLength: scadCode.length,
-        chunkCount,
-      });
-
-      const { id, filePath: scadPath } = await this.fileStorage.saveScadFile(
-        scadCode
-      );
-      logger.debug("SCAD file saved", { fileId: id, scadPath });
-
-      writeSse(res, SSE_EVENTS.compiling, {
-        message: "Compiling with OpenSCAD...",
-      });
-
-      const outputPath = this.fileStorage.getOutputPath(id, format);
-      logger.info("Compiling 3D model", { fileId: id, format });
-
-      if (format === "stl") {
-        await this.openscadService.generateSTL(scadPath, outputPath);
-      } else {
-        await this.openscadService.generate3MF(scadPath, outputPath);
-      }
-      logger.info("3D model compiled successfully", {
-        fileId: id,
+      await this.modelWorkflow.generateModelStream(
+        res,
+        prompt,
         format,
-        outputPath,
-      });
-
-      writeSse(res, SSE_EVENTS.completed, {
-        data: {
-          id,
-          prompt,
-          scadCode,
-          modelUrl: `/api/models/${id}/${format}`,
-          format,
-          generatedAt: new Date().toISOString(),
-          status: "completed",
-        },
-      });
-
-      logger.info("Model generation completed successfully", {
-        fileId: id,
-        modelUrl: `/api/models/${id}/${format}`,
-      });
+        conversationId
+      );
       res.end();
     } catch (error: any) {
       logger.error("Error generating model (streaming)", {
@@ -142,7 +88,6 @@ export class ModelController {
 
   async getModelFile(req: Request, res: Response): Promise<void> {
     const { id, format } = req.params;
-    logger.info("Retrieving model file", { fileId: id, format });
 
     try {
       if (format !== "stl" && format !== "3mf") {
@@ -157,14 +102,12 @@ export class ModelController {
         return;
       }
 
-      const filePath = this.fileStorage.getOutputPath(
+      const result = await this.modelWorkflow.getModelFile(
         id,
         format as "stl" | "3mf"
       );
 
-      const exists = await this.fileStorage.fileExists(filePath);
-      if (!exists) {
-        logger.warn("Model file not found", { fileId: id, format, filePath });
+      if (!result) {
         res.status(404).json({
           success: false,
           error: "Model file not found",
@@ -172,8 +115,7 @@ export class ModelController {
         return;
       }
 
-      logger.info("Sending model file", { fileId: id, format, filePath });
-      res.sendFile(filePath);
+      res.sendFile(result.filePath);
     } catch (error: any) {
       logger.error("Error retrieving model file", {
         fileId: id,
