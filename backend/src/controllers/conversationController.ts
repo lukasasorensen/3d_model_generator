@@ -11,6 +11,12 @@ import {
   AddMessageRequest,
 } from "../../../shared/src/types/model";
 import { logger } from "../infrastructure/logger/logger";
+import {
+  SSE_EVENTS,
+  setSseHeaders,
+  writeAiStreamEvent,
+  writeSse,
+} from "../utils/sseUtils";
 
 export class ConversationController {
   constructor(
@@ -20,13 +26,6 @@ export class ConversationController {
     private fileStorage: FileStorageService
   ) {
     logger.debug("ConversationController initialized");
-  }
-
-  /**
-   * Helper to write SSE events to the response
-   */
-  private writeSSE(res: Response, eventType: string, data: any): void {
-    res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
   async listConversations(req: Request, res: Response): Promise<void> {
@@ -124,9 +123,7 @@ export class ConversationController {
     }
 
     // Set up SSE
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
+    setSseHeaders(res);
     logger.debug("SSE connection established for conversation creation");
 
     try {
@@ -134,7 +131,7 @@ export class ConversationController {
       const conversation = await this.conversationService.createConversation();
       logger.info("Conversation created", { conversationId: conversation.id });
 
-      this.writeSSE(res, "conversation_created", {
+      writeSse(res, SSE_EVENTS.conversationCreated, {
         conversationId: conversation.id,
       });
 
@@ -144,7 +141,7 @@ export class ConversationController {
         conversationId: conversation.id,
       });
 
-      this.writeSSE(res, "generation_start", {
+      writeSse(res, SSE_EVENTS.generationStart, {
         message: "Generating OpenSCAD code...",
       });
 
@@ -168,51 +165,10 @@ export class ConversationController {
       scadCode = await this.openScadAiService.generateCode(
         messages,
         (event: OpenScadStreamEvent) => {
-          switch (event.type) {
-            case "code_delta":
-              chunkCount++;
-              this.writeSSE(res, "code_delta", { chunk: event.delta });
-              break;
-
-            case "reasoning_delta":
-              this.writeSSE(res, "reasoning_delta", { chunk: event.delta });
-              break;
-
-            case "tool_call_start":
-              this.writeSSE(res, "tool_call_start", {
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
-              });
-              break;
-
-            case "tool_call_delta":
-              this.writeSSE(res, "tool_call_delta", {
-                toolCallId: event.toolCallId,
-                argumentsDelta: event.argumentsDelta,
-              });
-              break;
-
-            case "tool_call_end":
-              this.writeSSE(res, "tool_call_end", {
-                toolCallId: event.toolCallId,
-                arguments: event.arguments,
-              });
-              break;
-
-            case "done":
-              this.writeSSE(res, "code_complete", {
-                code: event.totalCode,
-                usage: event.usage,
-              });
-              break;
-
-            case "error":
-              this.writeSSE(res, "generation_error", {
-                error: event.error,
-                code: event.code,
-              });
-              break;
+          if (event.type === "code_delta") {
+            chunkCount++;
           }
+          writeAiStreamEvent(res, event);
         }
       );
 
@@ -227,7 +183,7 @@ export class ConversationController {
         await this.fileStorage.saveScadFile(scadCode);
       logger.debug("SCAD file saved", { fileId, scadPath });
 
-      this.writeSSE(res, "compiling", {
+      writeSse(res, SSE_EVENTS.compiling, {
         message: "Compiling with OpenSCAD...",
       });
 
@@ -269,7 +225,7 @@ export class ConversationController {
       const updatedConversation =
         await this.conversationService.getConversation(conversation.id);
 
-      this.writeSSE(res, "completed", {
+      writeSse(res, SSE_EVENTS.completed, {
         data: {
           conversation: updatedConversation,
           message: assistantMessage,
@@ -286,7 +242,7 @@ export class ConversationController {
         error: error.message,
         stack: error.stack,
       });
-      this.writeSSE(res, "error", {
+      writeSse(res, SSE_EVENTS.error, {
         error: error.message || "Failed to create conversation",
       });
       res.end();
@@ -346,9 +302,7 @@ export class ConversationController {
     }
 
     // Set up SSE
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
+    setSseHeaders(res);
     logger.debug("SSE connection established for adding message", {
       conversationId,
     });
@@ -358,7 +312,7 @@ export class ConversationController {
       await this.conversationService.addUserMessage(conversationId, prompt);
       logger.debug("User message added", { conversationId });
 
-      this.writeSSE(res, "generation_start", {
+      writeSse(res, SSE_EVENTS.generationStart, {
         message: "Generating OpenSCAD code...",
       });
 
@@ -383,51 +337,10 @@ export class ConversationController {
       scadCode = await this.openScadAiService.generateCode(
         messages,
         (event: OpenScadStreamEvent) => {
-          switch (event.type) {
-            case "code_delta":
-              chunkCount++;
-              this.writeSSE(res, "code_delta", { chunk: event.delta });
-              break;
-
-            case "reasoning_delta":
-              this.writeSSE(res, "reasoning_delta", { chunk: event.delta });
-              break;
-
-            case "tool_call_start":
-              this.writeSSE(res, "tool_call_start", {
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
-              });
-              break;
-
-            case "tool_call_delta":
-              this.writeSSE(res, "tool_call_delta", {
-                toolCallId: event.toolCallId,
-                argumentsDelta: event.argumentsDelta,
-              });
-              break;
-
-            case "tool_call_end":
-              this.writeSSE(res, "tool_call_end", {
-                toolCallId: event.toolCallId,
-                arguments: event.arguments,
-              });
-              break;
-
-            case "done":
-              this.writeSSE(res, "code_complete", {
-                code: event.totalCode,
-                usage: event.usage,
-              });
-              break;
-
-            case "error":
-              this.writeSSE(res, "generation_error", {
-                error: event.error,
-                code: event.code,
-              });
-              break;
+          if (event.type === "code_delta") {
+            chunkCount++;
           }
+          writeAiStreamEvent(res, event);
         }
       );
 
@@ -442,7 +355,7 @@ export class ConversationController {
         await this.fileStorage.saveScadFile(scadCode);
       logger.debug("SCAD file saved", { conversationId, fileId, scadPath });
 
-      this.writeSSE(res, "compiling", {
+      writeSse(res, SSE_EVENTS.compiling, {
         message: "Compiling with OpenSCAD...",
       });
 
@@ -480,7 +393,7 @@ export class ConversationController {
       const updatedConversation =
         await this.conversationService.getConversation(conversationId);
 
-      this.writeSSE(res, "completed", {
+      writeSse(res, SSE_EVENTS.completed, {
         data: {
           conversation: updatedConversation,
           message: assistantMessage,
@@ -498,7 +411,7 @@ export class ConversationController {
         error: error.message,
         stack: error.stack,
       });
-      this.writeSSE(res, "error", {
+      writeSse(res, SSE_EVENTS.error, {
         error: error.message || "Failed to add message",
       });
       res.end();

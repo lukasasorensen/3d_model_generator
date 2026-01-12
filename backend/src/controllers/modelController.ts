@@ -7,6 +7,12 @@ import { OpenSCADService } from "../services/openscadService";
 import { FileStorageService } from "../services/fileStorageService";
 import { ModelGenerationRequest } from "../../../shared/src/types/model";
 import { logger } from "../infrastructure/logger/logger";
+import {
+  SSE_EVENTS,
+  setSseHeaders,
+  writeAiStreamEvent,
+  writeSse,
+} from "../utils/sseUtils";
 
 export class ModelController {
   constructor(
@@ -15,13 +21,6 @@ export class ModelController {
     private fileStorage: FileStorageService
   ) {
     logger.debug("ModelController initialized");
-  }
-
-  /**
-   * Helper to write SSE events to the response
-   */
-  private writeSSE(res: Response, eventType: string, data: any): void {
-    res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
   async generateModelStream(req: Request, res: Response): Promise<void> {
@@ -60,13 +59,11 @@ export class ModelController {
       return;
     }
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
+    setSseHeaders(res);
     logger.debug("SSE connection established for model generation");
 
     try {
-      this.writeSSE(res, "generation_start", {
+      writeSse(res, SSE_EVENTS.generationStart, {
         message: "Generating OpenSCAD code...",
       });
 
@@ -79,51 +76,10 @@ export class ModelController {
       const scadCode = await this.openScadAiService.generateCode(
         messages,
         (event: OpenScadStreamEvent) => {
-          switch (event.type) {
-            case "code_delta":
-              chunkCount++;
-              this.writeSSE(res, "code_delta", { chunk: event.delta });
-              break;
-
-            case "reasoning_delta":
-              this.writeSSE(res, "reasoning_delta", { chunk: event.delta });
-              break;
-
-            case "tool_call_start":
-              this.writeSSE(res, "tool_call_start", {
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
-              });
-              break;
-
-            case "tool_call_delta":
-              this.writeSSE(res, "tool_call_delta", {
-                toolCallId: event.toolCallId,
-                argumentsDelta: event.argumentsDelta,
-              });
-              break;
-
-            case "tool_call_end":
-              this.writeSSE(res, "tool_call_end", {
-                toolCallId: event.toolCallId,
-                arguments: event.arguments,
-              });
-              break;
-
-            case "done":
-              this.writeSSE(res, "code_complete", {
-                code: event.totalCode,
-                usage: event.usage,
-              });
-              break;
-
-            case "error":
-              this.writeSSE(res, "generation_error", {
-                error: event.error,
-                code: event.code,
-              });
-              break;
+          if (event.type === "code_delta") {
+            chunkCount++;
           }
+          writeAiStreamEvent(res, event);
         }
       );
 
@@ -137,7 +93,7 @@ export class ModelController {
       );
       logger.debug("SCAD file saved", { fileId: id, scadPath });
 
-      this.writeSSE(res, "compiling", {
+      writeSse(res, SSE_EVENTS.compiling, {
         message: "Compiling with OpenSCAD...",
       });
 
@@ -155,7 +111,7 @@ export class ModelController {
         outputPath,
       });
 
-      this.writeSSE(res, "completed", {
+      writeSse(res, SSE_EVENTS.completed, {
         data: {
           id,
           prompt,
@@ -177,7 +133,7 @@ export class ModelController {
         error: error.message,
         stack: error.stack,
       });
-      this.writeSSE(res, "error", {
+      writeSse(res, SSE_EVENTS.error, {
         error: error.message || "Failed to generate model",
       });
       res.end();
