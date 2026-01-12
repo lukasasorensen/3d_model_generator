@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { apiClient, ModelStreamEvent } from "../api/client";
 import { Conversation, ConversationListItem } from "../types";
 
@@ -23,6 +23,7 @@ export function useConversations() {
     streamingReasoning: "",
     statusMessage: "",
   });
+  const currentConversationIdRef = useRef<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -75,6 +76,7 @@ export function useConversations() {
       });
 
       try {
+        currentConversationIdRef.current = null;
         await apiClient.generateModelStream(
           { prompt, format },
           (event: ModelStreamEvent) => {
@@ -91,6 +93,16 @@ export function useConversations() {
           status: "error",
           statusMessage: errorMessage,
         }));
+        if (currentConversationIdRef.current) {
+          try {
+            const conversation = await apiClient.getConversation(
+              currentConversationIdRef.current
+            );
+            setActiveConversation(conversation);
+          } catch {
+            // Ignore load errors on failure paths
+          }
+        }
       } finally {
         setLoading(false);
       }
@@ -108,6 +120,7 @@ export function useConversations() {
 
       setLoading(true);
       setError(null);
+      currentConversationIdRef.current = activeConversation.id;
       setStreaming({
         status: "idle",
         streamingCode: "",
@@ -132,6 +145,16 @@ export function useConversations() {
           status: "error",
           statusMessage: errorMessage,
         }));
+        if (currentConversationIdRef.current) {
+          try {
+            const conversation = await apiClient.getConversation(
+              currentConversationIdRef.current
+            );
+            setActiveConversation(conversation);
+          } catch {
+            // Ignore load errors on failure paths
+          }
+        }
       } finally {
         setLoading(false);
       }
@@ -142,6 +165,9 @@ export function useConversations() {
   const handleStreamEvent = useCallback((event: ModelStreamEvent) => {
     switch (event.type) {
       case "conversation_created":
+        if (event.conversationId) {
+          currentConversationIdRef.current = event.conversationId;
+        }
         // Conversation created, waiting for generation
         break;
 

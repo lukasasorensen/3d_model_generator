@@ -94,11 +94,14 @@ openscad --version
    POSTGRES_PASSWORD=ai_openscad_dev
    POSTGRES_DB=ai_openscad
    POSTGRES_HOST=localhost
-   POSTGRES_PORT=5432
+  POSTGRES_PORT=5432
 
-   # Prisma DATABASE_URL (constructed from above variables)
-   DATABASE_URL=postgresql://ai_openscad:ai_openscad_dev@localhost:5432/ai_openscad
-   ```
+  # Prisma DATABASE_URL (constructed from above variables)
+  DATABASE_URL=postgresql://ai_openscad:ai_openscad_dev@localhost:5432/ai_openscad
+
+  # OpenSCAD
+  OPENSCAD_MAX_RETRIES=2
+  ```
 
    | Variable            | Required | Description                                     |
    | ------------------- | -------- | ----------------------------------------------- |
@@ -107,9 +110,10 @@ openscad --version
    | `POSTGRES_PASSWORD` | Yes      | PostgreSQL password                             |
    | `POSTGRES_DB`       | Yes      | PostgreSQL database name                        |
    | `POSTGRES_HOST`     | Yes      | PostgreSQL host (use `localhost` for local dev) |
-   | `POSTGRES_PORT`     | No       | PostgreSQL port (defaults to `5432`)            |
-   | `DATABASE_URL`      | Yes      | Full connection URL for Prisma CLI commands     |
-   | `PORT`              | No       | Backend server port (defaults to `3001`)        |
+  | `POSTGRES_PORT`     | No       | PostgreSQL port (defaults to `5432`)            |
+  | `DATABASE_URL`      | Yes      | Full connection URL for Prisma CLI commands     |
+  | `PORT`              | No       | Backend server port (defaults to `3001`)        |
+  | `OPENSCAD_MAX_RETRIES` | No    | Compile retry attempts (defaults to `2`)        |
 
    > **Note**: The `DATABASE_URL` must match the individual `POSTGRES_*` variables. It's required for Prisma CLI commands like migrations.
 

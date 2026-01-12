@@ -120,8 +120,8 @@ export class ConversationService {
     conversationId: string,
     content: string,
     scadCode: string,
-    modelUrl: string,
-    format: "stl" | "3mf"
+    modelUrl?: string,
+    format?: "stl" | "3mf"
   ): Promise<Message> {
     logger.debug("Adding assistant message to conversation", {
       conversationId,

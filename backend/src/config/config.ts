@@ -30,6 +30,9 @@ export interface Config {
       xlarge: string;
     };
   };
+  openscad: {
+    maxCompileRetries: number;
+  };
 }
 
 export const config: Config = {
@@ -61,5 +64,8 @@ export const config: Config = {
       large: process.env.OPENAI_MODEL_LARGE || "gpt-5",
       xlarge: process.env.OPENAI_MODEL_XLARGE || "gpt-5",
     },
+  },
+  openscad: {
+    maxCompileRetries: parseInt(process.env.OPENSCAD_MAX_RETRIES || "2"),
   },
 };

@@ -12,6 +12,7 @@ import {
   writeAiStreamEvent,
   writeSse,
 } from "../utils/sseUtils";
+import { config } from "../config/config";
 
 export class ModelWorkflow {
   constructor(
@@ -90,84 +91,128 @@ export class ModelWorkflow {
     format: "stl" | "3mf",
     isNewConversation: boolean
   ): Promise<void> {
-    writeSse(res, SSE_EVENTS.generationStart, {
-      message: "Generating OpenSCAD code...",
-    });
+    const maxAttempts = Math.max(1, config.openscad.maxCompileRetries);
 
-    const messages = await this.conversationService.getConversationMessages(
-      conversationId
-    );
-    logger.debug("Retrieved conversation messages for AI context", {
-      conversationId,
-      messageCount: messages.length,
-    });
-
-    let chunkCount = 0;
-    const scadCode = await this.openScadAiService.generateCode(
-      messages,
-      (event: OpenScadStreamEvent) => {
-        if (event.type === "code_delta") {
-          chunkCount++;
-        }
-        writeAiStreamEvent(res, event);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt === 1) {
+        writeSse(res, SSE_EVENTS.generationStart, {
+          message: "Generating OpenSCAD code...",
+        });
+      } else {
+        writeSse(res, SSE_EVENTS.generationStart, {
+          message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+        });
       }
-    );
 
-    logger.info("Code generation completed", {
-      conversationId,
-      codeLength: scadCode.length,
-      chunkCount,
-    });
+      const messages = await this.conversationService.getConversationMessages(
+        conversationId
+      );
+      logger.debug("Retrieved conversation messages for AI context", {
+        conversationId,
+        messageCount: messages.length,
+      });
 
-    const { id: fileId, filePath: scadPath } =
-      await this.fileStorage.saveScadFile(scadCode);
-    logger.debug("SCAD file saved", { conversationId, fileId, scadPath });
+      let chunkCount = 0;
+      const scadCode = await this.openScadAiService.generateCode(
+        messages,
+        (event: OpenScadStreamEvent) => {
+          if (event.type === "code_delta") {
+            chunkCount++;
+          }
+          writeAiStreamEvent(res, event);
+        }
+      );
 
-    writeSse(res, SSE_EVENTS.compiling, {
-      message: "Compiling with OpenSCAD...",
-    });
+      logger.info("Code generation completed", {
+        conversationId,
+        codeLength: scadCode.length,
+        chunkCount,
+        attempt,
+      });
 
-    const outputPath = this.fileStorage.getOutputPath(fileId, format);
-    if (format === "stl") {
-      await this.openscadService.generateSTL(scadPath, outputPath);
-    } else {
-      await this.openscadService.generate3MF(scadPath, outputPath);
+      const { id: fileId, filePath: scadPath } =
+        await this.fileStorage.saveScadFile(scadCode);
+      logger.debug("SCAD file saved", { conversationId, fileId, scadPath });
+
+      writeSse(res, SSE_EVENTS.compiling, {
+        message: "Compiling with OpenSCAD...",
+      });
+
+      const outputPath = this.fileStorage.getOutputPath(fileId, format);
+
+      try {
+        if (format === "stl") {
+          await this.openscadService.generateSTL(scadPath, outputPath);
+        } else {
+          await this.openscadService.generate3MF(scadPath, outputPath);
+        }
+        logger.info("3D model compiled successfully", {
+          conversationId,
+          format,
+          outputPath,
+          attempt,
+        });
+
+        const modelUrl = `/api/models/${fileId}/${format}`;
+        const assistantMessage =
+          await this.conversationService.addAssistantMessage(
+            conversationId,
+            isNewConversation
+              ? `Generated model for: ${prompt}`
+              : `Updated model for: ${prompt}`,
+            scadCode,
+            modelUrl,
+            format
+          );
+        logger.debug("Assistant message saved", {
+          conversationId,
+          messageId: assistantMessage.id,
+        });
+
+        const updatedConversation =
+          await this.conversationService.getConversation(conversationId);
+
+        writeSse(res, SSE_EVENTS.completed, {
+          data: {
+            conversation: updatedConversation,
+            message: assistantMessage,
+          },
+        });
+
+        logger.info("Model generation completed successfully", {
+          conversationId,
+          modelUrl,
+        });
+        return;
+      } catch (error: any) {
+        const rawMessage = error?.message || "OpenSCAD compilation error";
+        const parsed = this.openscadService.parseError(rawMessage);
+        logger.warn("OpenSCAD compilation failed", {
+          conversationId,
+          attempt,
+          error: rawMessage,
+        });
+
+        await this.conversationService.addAssistantMessage(
+          conversationId,
+          "Generated OpenSCAD code (failed to compile).",
+          scadCode,
+          undefined,
+          format
+        );
+
+        await this.conversationService.addUserMessage(
+          conversationId,
+          `The previous OpenSCAD code failed to compile. Error: ${parsed.message}. Please fix the code and return the complete updated OpenSCAD source.`
+        );
+
+        if (attempt === maxAttempts) {
+          throw new Error(
+            `Failed to compile OpenSCAD after ${maxAttempts} attempts: ${parsed.message}`
+          );
+        }
+      }
     }
-    logger.info("3D model compiled successfully", {
-      conversationId,
-      format,
-      outputPath,
-    });
-
-    const modelUrl = `/api/models/${fileId}/${format}`;
-    const assistantMessage = await this.conversationService.addAssistantMessage(
-      conversationId,
-      isNewConversation
-        ? `Generated model for: ${prompt}`
-        : `Updated model for: ${prompt}`,
-      scadCode,
-      modelUrl,
-      format
-    );
-    logger.debug("Assistant message saved", {
-      conversationId,
-      messageId: assistantMessage.id,
-    });
-
-    const updatedConversation =
-      await this.conversationService.getConversation(conversationId);
-
-    writeSse(res, SSE_EVENTS.completed, {
-      data: {
-        conversation: updatedConversation,
-        message: assistantMessage,
-      },
-    });
-
-    logger.info("Model generation completed successfully", {
-      conversationId,
-      modelUrl,
-    });
   }
 
   async getModelFile(

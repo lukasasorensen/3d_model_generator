@@ -6,73 +6,20 @@ interface ConversationViewProps {
 }
 
 export function ConversationView({ conversation }: ConversationViewProps) {
-  // Get the latest assistant message with a model
-  const latestModelMessage = [...conversation.messages]
-    .reverse()
-    .find((msg) => msg.role === "assistant" && msg.modelUrl);
-
   return (
     <div className="space-y-6">
-      {/* Message History */}
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-800">
             Conversation History
           </h2>
         </div>
-        <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+        <div className="divide-y divide-slate-100">
           {conversation.messages.map((message) => (
             <MessageItem key={message.id} message={message} />
           ))}
         </div>
       </div>
-
-      {/* Latest Model */}
-      {latestModelMessage && latestModelMessage.modelUrl && (
-        <div className="bg-white rounded-lg shadow-lg p-6 space-y-4">
-          <h2 className="text-xl font-semibold text-slate-800">
-            Current 3D Model
-          </h2>
-          <ModelViewer modelUrl={latestModelMessage.modelUrl} />
-
-          <div>
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">
-              OpenSCAD Code
-            </h3>
-            <pre className="bg-slate-900 text-emerald-400 p-4 rounded-lg overflow-x-auto text-sm">
-              <code>{latestModelMessage.scadCode}</code>
-            </pre>
-          </div>
-
-          <div className="flex gap-4">
-            <a
-              href={latestModelMessage.modelUrl}
-              download={`model.${latestModelMessage.format || "stl"}`}
-              className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
-            >
-              Download {(latestModelMessage.format || "stl").toUpperCase()}
-            </a>
-            <button
-              onClick={() => {
-                if (latestModelMessage.scadCode) {
-                  const blob = new Blob([latestModelMessage.scadCode], {
-                    type: "text/plain",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = "model.scad";
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }
-              }}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            >
-              Download .scad
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -124,15 +71,71 @@ function MessageItem({ message }: { message: Message }) {
             </span>
           </div>
           <p className="text-slate-600 text-sm">{message.content}</p>
+          {message.modelUrl && (
+            <div className="mt-4 space-y-4">
+              <h4 className="text-xs uppercase tracking-wide text-slate-500">
+                3D Model
+              </h4>
+              <ModelViewer modelUrl={message.modelUrl} />
+              <div className="flex gap-3 flex-wrap">
+                <a
+                  href={message.modelUrl}
+                  download={`model.${message.format || "stl"}`}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+                >
+                  Download {(message.format || "stl").toUpperCase()}
+                </a>
+                <button
+                  onClick={() => {
+                    if (message.scadCode) {
+                      const blob = new Blob([message.scadCode], {
+                        type: "text/plain",
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "model.scad";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  Download .scad
+                </button>
+              </div>
+            </div>
+          )}
           {message.scadCode && (
-            <details className="mt-2">
-              <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
-                View generated code
-              </summary>
-              <pre className="mt-2 bg-slate-900 text-emerald-400 p-3 rounded text-xs overflow-x-auto">
-                <code>{message.scadCode}</code>
-              </pre>
-            </details>
+            <div className="mt-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h4 className="text-xs uppercase tracking-wide text-slate-500">
+                  OpenSCAD Code
+                </h4>
+                <button
+                  onClick={() => {
+                    void navigator.clipboard.writeText(message.scadCode || "");
+                  }}
+                  className="text-xs text-slate-600 hover:text-slate-800 transition-colors"
+                >
+                  Copy code
+                </button>
+              </div>
+              {message.modelUrl ? (
+                <details>
+                  <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+                    View code
+                  </summary>
+                  <pre className="mt-2 bg-slate-900 text-emerald-400 p-3 rounded text-xs overflow-x-auto max-h-64 overflow-y-auto">
+                    <code>{message.scadCode}</code>
+                  </pre>
+                </details>
+              ) : (
+                <pre className="bg-slate-900 text-emerald-400 p-3 rounded text-xs overflow-x-auto max-h-64 overflow-y-auto">
+                  <code>{message.scadCode}</code>
+                </pre>
+              )}
+            </div>
           )}
         </div>
       </div>

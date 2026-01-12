@@ -22,6 +22,8 @@ export default function App() {
 
   const isStreaming = loading && streaming.status !== "idle";
   const hasActiveConversation = !!activeConversation;
+  const showInitialPrompt = !hasActiveConversation && !loading;
+  const showFollowUpPrompt = hasActiveConversation || loading;
 
   return (
     <div className="flex h-screen bg-slate-100">
@@ -37,7 +39,11 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto py-8 px-6">
+        <div
+          className={`max-w-4xl mx-auto py-8 px-6 ${
+            showFollowUpPrompt ? "pb-40" : ""
+          }`}
+        >
           <header className="text-center mb-8">
             <h1 className="text-4xl font-bold text-slate-900 mb-2">
               OpenSCAD AI Model Generator
@@ -51,13 +57,11 @@ export default function App() {
 
           <div className="space-y-6">
             {/* Prompt Input */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <PromptInput
-                onSubmit={addMessage}
-                loading={loading}
-                isFollowUp={hasActiveConversation}
-              />
-            </div>
+            {showInitialPrompt && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <PromptInput onSubmit={addMessage} loading={loading} />
+              </div>
+            )}
 
             {/* Error Display */}
             {error && <ErrorDisplay message={error} onDismiss={clearError} />}
@@ -103,11 +107,24 @@ export default function App() {
             )}
           </div>
 
-          <footer className="mt-12 text-center text-slate-500 text-sm">
-            <p>Powered by OpenAI GPT and OpenSCAD • Real-time streaming</p>
+          <footer className="mt-12 text-center text-slate-500 text-sm pb-10">
+            <p>Created by: Lukas Sorensen | {new Date().getFullYear()} ©</p>
           </footer>
         </div>
       </div>
+
+      {showFollowUpPrompt && (
+        <div className="fixed bottom-0 left-72 right-0 z-20 px-6 pb-6">
+          <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 p-4">
+            <PromptInput
+              onSubmit={addMessage}
+              loading={loading}
+              isFollowUp
+              compact
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

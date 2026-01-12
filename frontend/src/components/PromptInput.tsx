@@ -4,12 +4,14 @@ interface PromptInputProps {
   onSubmit: (prompt: string) => void;
   loading: boolean;
   isFollowUp?: boolean;
+  compact?: boolean;
 }
 
 export function PromptInput({
   onSubmit,
   loading,
   isFollowUp = false,
+  compact = false,
 }: PromptInputProps) {
   const [prompt, setPrompt] = useState("");
 
@@ -49,15 +51,19 @@ export function PromptInput({
                 ? "Describe how you want to modify the model..."
                 : "Describe the 3D model you want to create..."
             }
-            className="w-full p-4 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-            rows={3}
+            className={`w-full border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white ${
+              compact ? "p-3 text-sm" : "p-4"
+            }`}
+            rows={compact ? 1 : 3}
             disabled={loading}
           />
         </div>
         <button
           type="submit"
           disabled={loading || !prompt.trim()}
-          className="px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors font-medium"
+          className={`bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors font-medium ${
+            compact ? "px-4 py-2 text-sm" : "px-6 py-3"
+          }`}
         >
           {loading
             ? "Generating..."
@@ -67,7 +73,8 @@ export function PromptInput({
         </button>
       </form>
 
-      <div className="mt-4">
+      {!compact && (
+        <div className="mt-4">
         <p className="text-sm text-slate-600 mb-2">
           {isFollowUp ? "Modification ideas:" : "Example prompts:"}
         </p>
@@ -84,6 +91,7 @@ export function PromptInput({
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }
