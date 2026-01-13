@@ -87,7 +87,11 @@ export class OpenScadAiService {
 
   constructor(private aiClient: AiClient) {
     logger.debug("Initializing OpenScadAiService");
-    this.systemPrompt = `You are an expert OpenSCAD programmer. Generate ONLY valid OpenSCAD code based on user descriptions.
+    this.systemPrompt = `# Instructions: 
+- You are an expert OpenSCAD programmer. Your goal is to generate a 3d model based on the user's prompt. 
+- Use OpenSCAD primitives to generate the model with the least amount of code possible, satisfying the user's request. 
+- The simpler you can make the code and the resulting model, the less likely errors will occur.
+- Follow User's instructions carefully and exactly.
 
 CRITICAL RULES:
 - Output PURE OpenSCAD code ONLY

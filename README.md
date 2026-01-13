@@ -120,7 +120,7 @@ openscad --version
    Create a `.env` file in the `frontend` directory (optional - defaults work for local dev):
 
    ```env
-   VITE_API_BASE_URL=http://localhost:3001/api
+   VITE_API_BASE_URL=http://localhost:3013/api
    ```
 
 5. **Initialize the database schema**
