@@ -20,6 +20,7 @@ export interface ModelStreamEvent {
     | "tool_call_end"
     | "code_complete"
     | "compiling"
+    | "outputting"
     | "validating"
     | "completed"
     | "generation_error"

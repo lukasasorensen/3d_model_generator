@@ -133,13 +133,18 @@ export class ModelWorkflow {
         },
         onCompiling: () => {
           writeSse(res, SSE_EVENTS.compiling, {
-            message: "Compiling with OpenSCAD...",
+            message: "Rendering preview...",
           });
         },
         onValidating: (previewUrl) => {
           writeSse(res, SSE_EVENTS.validating, {
             message: "Validating preview...",
             previewUrl,
+          });
+        },
+        onOutputting: () => {
+          writeSse(res, SSE_EVENTS.outputting, {
+            message: "Generating final model...",
           });
         },
         onStreamEvent: (event) => {

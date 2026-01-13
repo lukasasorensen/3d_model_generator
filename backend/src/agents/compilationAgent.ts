@@ -6,7 +6,6 @@ import { logger } from "../infrastructure/logger/logger";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { AiClient } from "../clients/aiClient";
-import { config } from "../config/config";
 
 const execAsync = promisify(exec);
 
@@ -16,9 +15,8 @@ export class VisionCheckError extends Error {
     public previewUrl: string,
     public compiled: {
       fileId: string;
-      outputPath: string;
-      modelUrl: string;
       previewPath: string;
+      scadPath: string;
     }
   ) {
     super(message);
@@ -40,47 +38,42 @@ export class CompilationAgent {
     private aiClient: AiClient
   ) {}
 
-  async compileModel({
+  async previewModel({
     scadCode,
     prompt,
-    format = "stl",
     validate = false,
     onValidationStart,
   }: {
     scadCode: string;
     prompt: string;
-    format?: "stl" | "3mf";
     validate?: boolean;
     onValidationStart?: (previewUrl: string) => void;
   }): Promise<{
     fileId: string;
-    outputPath: string;
-    modelUrl: string;
     previewPath: string;
     previewUrl: string;
+    scadPath: string;
   }> {
     const { id: fileId, filePath: scadPath } =
       await this.fileStorage.saveScadFile(scadCode);
-    const outputPath = this.fileStorage.getOutputPath(fileId, format);
 
     try {
-      if (format === "stl") {
-        await this.openscadService.generateSTL(scadPath, outputPath);
-      } else {
-        await this.openscadService.generate3MF(scadPath, outputPath);
-      }
+      await this.generatePreview(scadPath, fileId);
     } catch (error: any) {
       throw new CompileError(`Failed to compile model: ${error.message}`);
     }
 
-    const previewPath = await this.generatePreview(scadPath, fileId);
+    const previewPath = path.join(
+      path.dirname(path.dirname(scadPath)),
+      "previews",
+      `${fileId}.png`
+    );
 
     const previewUrl = `/api/previews/${fileId}.png`;
     const compiled = {
       fileId,
-      outputPath,
-      modelUrl: `/api/models/${fileId}/${format}`,
       previewPath,
+      scadPath,
     };
 
     if (validate) {
@@ -90,10 +83,28 @@ export class CompilationAgent {
 
     return {
       fileId: compiled.fileId,
-      outputPath: compiled.outputPath,
-      modelUrl: compiled.modelUrl,
       previewPath,
       previewUrl,
+      scadPath,
+    };
+  }
+
+  async generateOutput(
+    scadPath: string,
+    fileId: string,
+    format: "stl" | "3mf"
+  ): Promise<{ outputPath: string; modelUrl: string }> {
+    const outputPath = this.fileStorage.getOutputPath(fileId, format);
+
+    if (format === "stl") {
+      await this.openscadService.generateSTL(scadPath, outputPath);
+    } else {
+      await this.openscadService.generate3MF(scadPath, outputPath);
+    }
+
+    return {
+      outputPath,
+      modelUrl: `/api/models/${fileId}/${format}`,
     };
   }
 
@@ -119,7 +130,9 @@ export class CompilationAgent {
         error: error.message,
         previewPath,
       });
-      throw new Error(`Failed to generate preview image: ${error.message}`);
+      throw new CompileError(
+        `Failed to generate preview image: ${error.message}`
+      );
     }
   }
 
@@ -129,9 +142,8 @@ export class CompilationAgent {
     previewUrl: string,
     compiled: {
       fileId: string;
-      outputPath: string;
-      modelUrl: string;
       previewPath: string;
+      scadPath: string;
     }
   ): Promise<void> {
     const imageBuffer = await fs.readFile(previewPath);

@@ -258,6 +258,14 @@ export function useConversations() {
         }));
         break;
 
+      case "outputting":
+        setStreaming((prev) => ({
+          ...prev,
+          status: "compiling",
+          statusMessage: event.message || "Generating final model...",
+        }));
+        break;
+
       case "completed":
         if (event.data) {
           setActiveConversation(event.data.conversation);

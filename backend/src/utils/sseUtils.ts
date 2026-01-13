@@ -12,6 +12,7 @@ export const SSE_EVENTS = {
   codeComplete: "code_complete",
   generationError: "generation_error",
   compiling: "compiling",
+  outputting: "outputting",
   validating: "validating",
   completed: "completed",
   error: "error",

@@ -15,6 +15,7 @@ interface GenerationAttemptCallbacks {
   ) => void;
   onCompiling: () => void;
   onValidating: (previewUrl: string) => void;
+  onOutputting: () => void;
   onStreamEvent: (event: OpenScadStreamEvent) => void;
 }
 
@@ -43,11 +44,9 @@ export class GenerationRetryRunner {
     let lastCompiled:
       | {
           scadCode: string;
-          modelUrl: string;
-          outputPath: string;
           fileId: string;
           previewUrl: string;
-          validation: { status: "ok" | "update"; reason?: string };
+          scadPath: string;
         }
       | null = null;
     let lastFailure:
@@ -86,20 +85,19 @@ export class GenerationRetryRunner {
       callbacks.onCompiling();
 
       try {
-        const result = await this.compilationAgent.compileModel({
-            scadCode,
-            format,
-            prompt,
-            validate: true,
-            onValidationStart: callbacks.onValidating,
-          });
-        return {
+        const result = await this.compilationAgent.previewModel({
           scadCode,
-          modelUrl: result.modelUrl,
-          outputPath: result.outputPath,
+          prompt,
+          validate: true,
+          onValidationStart: callbacks.onValidating,
+        });
+        lastCompiled = {
+          scadCode,
           fileId: result.fileId,
           previewUrl: result.previewUrl,
+          scadPath: result.scadPath,
         };
+        break;
       } catch (error: any) {
         if (error instanceof VisionCheckError) {
           logger.warn("Visual QA requested update", {
@@ -110,11 +108,9 @@ export class GenerationRetryRunner {
 
           lastCompiled = {
             scadCode,
-            modelUrl: error.compiled.modelUrl,
-            outputPath: error.compiled.outputPath,
             fileId: error.compiled.fileId,
             previewUrl: error.previewUrl,
-            validation: { status: "update", reason: error.message },
+            scadPath: error.compiled.scadPath,
           };
 
           await this.retryFeedbackAgent.recordFailure(
@@ -128,13 +124,7 @@ export class GenerationRetryRunner {
           lastFailure = { type: "validation", message: error.message };
 
           if (attempt === maxAttempts) {
-            return {
-              scadCode: lastCompiled.scadCode,
-              modelUrl: lastCompiled.modelUrl,
-              outputPath: lastCompiled.outputPath,
-              fileId: lastCompiled.fileId,
-              previewUrl: lastCompiled.previewUrl,
-            };
+            break;
           }
           continue;
         }
@@ -158,13 +148,7 @@ export class GenerationRetryRunner {
 
         if (attempt === maxAttempts) {
           if (lastCompiled) {
-            return {
-              scadCode: lastCompiled.scadCode,
-              modelUrl: lastCompiled.modelUrl,
-              outputPath: lastCompiled.outputPath,
-              fileId: lastCompiled.fileId,
-              previewUrl: lastCompiled.previewUrl,
-            };
+            break;
           }
           throw new Error(
             `Failed to generate model after ${maxAttempts} attempts: ${parsed.message}`
@@ -173,6 +157,24 @@ export class GenerationRetryRunner {
       }
     }
 
-    throw new Error("Model generation failed unexpectedly");
+    if (!lastCompiled) {
+      throw new Error("Model generation failed unexpectedly");
+    }
+
+    callbacks.onOutputting();
+
+    const output = await this.compilationAgent.generateOutput(
+      lastCompiled.scadPath,
+      lastCompiled.fileId,
+      format
+    );
+
+    return {
+      scadCode: lastCompiled.scadCode,
+      modelUrl: output.modelUrl,
+      outputPath: output.outputPath,
+      fileId: lastCompiled.fileId,
+      previewUrl: lastCompiled.previewUrl,
+    };
   }
 }
