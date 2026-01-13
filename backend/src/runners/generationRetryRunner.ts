@@ -8,8 +8,13 @@ import { config } from "../config/config";
 import { logger } from "../infrastructure/logger/logger";
 
 interface GenerationAttemptCallbacks {
-  onAttemptStart: (attempt: number, maxAttempts: number) => void;
+  onAttemptStart: (
+    attempt: number,
+    maxAttempts: number,
+    lastFailure?: { type: "validation" | "compilation"; message: string }
+  ) => void;
   onCompiling: () => void;
+  onValidating: (previewUrl: string) => void;
   onStreamEvent: (event: OpenScadStreamEvent) => void;
 }
 
@@ -32,11 +37,25 @@ export class GenerationRetryRunner {
     modelUrl: string;
     outputPath: string;
     fileId: string;
+    previewUrl: string;
   }> {
     const maxAttempts = Math.max(1, config.openscad.maxCompileRetries);
+    let lastCompiled:
+      | {
+          scadCode: string;
+          modelUrl: string;
+          outputPath: string;
+          fileId: string;
+          previewUrl: string;
+          validation: { status: "ok" | "update"; reason?: string };
+        }
+      | null = null;
+    let lastFailure:
+      | { type: "validation" | "compilation"; message: string }
+      | undefined;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      callbacks.onAttemptStart(attempt, maxAttempts);
+      callbacks.onAttemptStart(attempt, maxAttempts, lastFailure);
 
       const messages = await this.conversationService.getConversationMessages(
         conversationId
@@ -67,59 +86,93 @@ export class GenerationRetryRunner {
       callbacks.onCompiling();
 
       try {
-        const { fileId, outputPath, modelUrl } =
-          await this.compilationAgent.compileModel({
+        const result = await this.compilationAgent.compileModel({
             scadCode,
             format,
             prompt,
             validate: true,
+            onValidationStart: callbacks.onValidating,
           });
-        return { scadCode, modelUrl, outputPath, fileId };
+        return {
+          scadCode,
+          modelUrl: result.modelUrl,
+          outputPath: result.outputPath,
+          fileId: result.fileId,
+          previewUrl: result.previewUrl,
+        };
       } catch (error: any) {
-        let errorMessage: string;
-
         if (error instanceof VisionCheckError) {
-          logger.warn("Visual QA failed for model", {
+          logger.warn("Visual QA requested update", {
             conversationId,
             attempt,
-            error: error.message,
+            reason: error.message,
           });
-          errorMessage = `Visual QA failed: ${error.message}`;
-        } else {
-          const rawMessage = error?.message || "OpenSCAD compilation error";
-          const parsed = this.openscadService.parseError(rawMessage);
-          logger.warn("OpenSCAD compilation failed", {
+
+          lastCompiled = {
+            scadCode,
+            modelUrl: error.compiled.modelUrl,
+            outputPath: error.compiled.outputPath,
+            fileId: error.compiled.fileId,
+            previewUrl: error.previewUrl,
+            validation: { status: "update", reason: error.message },
+          };
+
+          await this.retryFeedbackAgent.recordFailure(
+            "validation",
             conversationId,
-            attempt,
-            error: rawMessage,
-          });
-          errorMessage = parsed.message;
+            scadCode,
+            format,
+            error.message,
+            error.previewUrl
+          );
+          lastFailure = { type: "validation", message: error.message };
+
+          if (attempt === maxAttempts) {
+            return {
+              scadCode: lastCompiled.scadCode,
+              modelUrl: lastCompiled.modelUrl,
+              outputPath: lastCompiled.outputPath,
+              fileId: lastCompiled.fileId,
+              previewUrl: lastCompiled.previewUrl,
+            };
+          }
+          continue;
         }
 
+        const rawMessage = error?.message || "OpenSCAD compilation error";
+        const parsed = this.openscadService.parseError(rawMessage);
+        logger.warn("OpenSCAD compilation failed", {
+          conversationId,
+          attempt,
+          error: rawMessage,
+        });
+
         await this.retryFeedbackAgent.recordFailure(
-          this.getErrorType(error),
+          "compilation",
           conversationId,
           scadCode,
           format,
-          errorMessage
+          parsed.message
         );
+        lastFailure = { type: "compilation", message: parsed.message };
 
         if (attempt === maxAttempts) {
+          if (lastCompiled) {
+            return {
+              scadCode: lastCompiled.scadCode,
+              modelUrl: lastCompiled.modelUrl,
+              outputPath: lastCompiled.outputPath,
+              fileId: lastCompiled.fileId,
+              previewUrl: lastCompiled.previewUrl,
+            };
+          }
           throw new Error(
-            `Failed to generate model after ${maxAttempts} attempts: ${errorMessage}`
+            `Failed to generate model after ${maxAttempts} attempts: ${parsed.message}`
           );
         }
       }
     }
 
     throw new Error("Model generation failed unexpectedly");
-  }
-
-  private getErrorType(error: Error): "validation" | "compilation" {
-    if (error instanceof VisionCheckError) {
-      return "validation";
-    } else {
-      return "compilation";
-    }
   }
 }

@@ -25,6 +25,7 @@ model Message {
   content        String       // prompt text for user, description for assistant
   scadCode       String?      // only for assistant messages
   modelUrl       String?      // only for assistant messages
+  previewUrl     String?      // preview image URL for assistant messages
   format         String?      // "stl" or "3mf" for assistant messages
   createdAt      DateTime     @default(now())
 

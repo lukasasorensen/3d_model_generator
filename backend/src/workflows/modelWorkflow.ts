@@ -112,20 +112,34 @@ export class ModelWorkflow {
       prompt,
       format,
       {
-        onAttemptStart: (attempt, maxAttempts) => {
+        onAttemptStart: (attempt, maxAttempts, lastFailure) => {
           if (attempt === 1) {
             writeSse(res, SSE_EVENTS.generationStart, {
               message: "Generating OpenSCAD code...",
             });
-          } else {
-            writeSse(res, SSE_EVENTS.generationStart, {
-              message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
-            });
+            return;
           }
+
+          if (lastFailure?.type === "validation") {
+            writeSse(res, SSE_EVENTS.generationStart, {
+              message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
+            });
+            return;
+          }
+
+          writeSse(res, SSE_EVENTS.generationStart, {
+            message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+          });
         },
         onCompiling: () => {
           writeSse(res, SSE_EVENTS.compiling, {
             message: "Compiling with OpenSCAD...",
+          });
+        },
+        onValidating: (previewUrl) => {
+          writeSse(res, SSE_EVENTS.validating, {
+            message: "Validating preview...",
+            previewUrl,
           });
         },
         onStreamEvent: (event) => {
@@ -147,7 +161,8 @@ export class ModelWorkflow {
         : `Updated model for: ${prompt}`,
       result.scadCode,
       result.modelUrl,
-      format
+      format,
+      result.previewUrl
     );
     logger.debug("Assistant message saved", {
       conversationId,

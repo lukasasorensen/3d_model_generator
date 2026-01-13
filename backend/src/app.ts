@@ -119,6 +119,10 @@ export function createApp() {
     logger.debug("Health check requested");
     res.json({ status: "ok" });
   });
+  app.use(
+    "/api/previews",
+    express.static(path.join(__dirname, "../generated/previews"))
+  );
   app.use("/api/models", createModelRoutes(modelController));
   app.use(
     "/api/conversations",

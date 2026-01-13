@@ -121,7 +121,8 @@ export class ConversationService {
     content: string,
     scadCode: string,
     modelUrl?: string,
-    format?: "stl" | "3mf"
+    format?: "stl" | "3mf",
+    previewUrl?: string
   ): Promise<Message> {
     logger.debug("Adding assistant message to conversation", {
       conversationId,
@@ -137,6 +138,7 @@ export class ConversationService {
         content,
         scadCode,
         modelUrl,
+        previewUrl,
         format,
       },
     });
@@ -208,6 +210,7 @@ export class ConversationService {
       content: msg.content,
       scadCode: msg.scadCode ?? undefined,
       modelUrl: msg.modelUrl ?? undefined,
+      previewUrl: msg.previewUrl ?? undefined,
       format: msg.format as "stl" | "3mf" | undefined,
       createdAt: msg.createdAt.toISOString(),
     };

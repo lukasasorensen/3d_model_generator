@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { RefObject, useEffect, useRef, useState } from "react";
 import { Conversation, Message } from "../types";
 import { ModelViewer } from "./ModelViewer";
 import { StreamingCodeDisplay } from "./StreamingCodeDisplay";
@@ -7,17 +7,46 @@ import { StreamingState } from "../hooks/useConversations";
 interface ConversationViewProps {
   conversation: Conversation;
   streaming?: StreamingState;
+  scrollContainerRef?: RefObject<HTMLDivElement>;
 }
 
 export function ConversationView({
   conversation,
   streaming,
+  scrollContainerRef,
 }: ConversationViewProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversation.messages.length, streaming?.streamingCode, streaming?.status]);
+    if (autoScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [
+    autoScroll,
+    conversation.messages.length,
+    streaming?.streamingCode,
+    streaming?.status,
+  ]);
+
+  useEffect(() => {
+    const container = scrollContainerRef?.current;
+    if (!container) {
+      return;
+    }
+
+    const handleScroll = () => {
+      const distanceToBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      setAutoScroll(distanceToBottom <= 24);
+    };
+
+    handleScroll();
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+    };
+  }, [scrollContainerRef]);
 
   return (
     <div className="space-y-6">
@@ -33,7 +62,10 @@ export function ConversationView({
           ))}
         </div>
       </div>
-      {streaming && streaming.status !== "idle" && (
+      {streaming &&
+        (streaming.status === "generating" ||
+          streaming.status === "compiling" ||
+          streaming.status === "validating") && (
         <div className="bg-white rounded-lg shadow-lg p-6">
           <StreamingCodeDisplay streaming={streaming} />
         </div>
@@ -90,6 +122,18 @@ function MessageItem({ message }: { message: Message }) {
             </span>
           </div>
           <p className="text-slate-600 text-sm">{message.content}</p>
+          {message.previewUrl && !message.modelUrl && (
+            <div className="mt-4 space-y-3">
+              <h4 className="text-xs uppercase tracking-wide text-slate-500">
+                Preview
+              </h4>
+              <img
+                src={message.previewUrl}
+                alt="Model preview"
+                className="w-full rounded-lg border border-slate-200"
+              />
+            </div>
+          )}
           {message.modelUrl && (
             <div className="mt-4 space-y-4">
               <h4 className="text-xs uppercase tracking-wide text-slate-500">

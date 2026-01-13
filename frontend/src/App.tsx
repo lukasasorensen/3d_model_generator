@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { PromptInput } from "./components/PromptInput";
 import { ErrorDisplay } from "./components/ErrorDisplay";
 import { ConversationSidebar } from "./components/ConversationSidebar";
@@ -5,6 +6,7 @@ import { ConversationView } from "./components/ConversationView";
 import { useConversations } from "./hooks/useConversations";
 
 export default function App() {
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const {
     conversations,
     activeConversation,
@@ -37,7 +39,7 @@ export default function App() {
       />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
         <div
           className={`max-w-4xl mx-auto py-8 px-6 ${
             showFollowUpPrompt ? "pb-40" : ""
@@ -70,6 +72,7 @@ export default function App() {
               <ConversationView
                 conversation={activeConversation}
                 streaming={streaming}
+                scrollContainerRef={scrollContainerRef}
               />
             )}
 

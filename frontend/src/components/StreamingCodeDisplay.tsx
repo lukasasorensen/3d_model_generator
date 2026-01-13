@@ -17,6 +17,8 @@ export function StreamingCodeDisplay({ streaming }: StreamingCodeDisplayProps) {
         return "bg-yellow-50 border-yellow-200";
       case "completed":
         return "bg-green-50 border-green-200";
+      case "validating":
+        return "bg-purple-50 border-purple-200";
       case "error":
         return "bg-red-50 border-red-200";
       default:
@@ -56,6 +58,18 @@ export function StreamingCodeDisplay({ streaming }: StreamingCodeDisplayProps) {
             />
           </svg>
         );
+      case "validating":
+        return (
+          <div className="animate-pulse">
+            <svg
+              className="h-5 w-5 text-purple-600"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9v-2h2v2zm0-4H9V5h2v4z" />
+            </svg>
+          </div>
+        );
       default:
         return null;
     }
@@ -72,7 +86,17 @@ export function StreamingCodeDisplay({ streaming }: StreamingCodeDisplayProps) {
         </h3>
       </div>
 
-      {streaming.streamingCode && (
+      {streaming.status === "validating" && streaming.previewUrl && (
+        <div className="mt-4">
+          <img
+            src={streaming.previewUrl}
+            alt="Model preview"
+            className="w-full rounded-lg border border-slate-200"
+          />
+        </div>
+      )}
+
+      {streaming.streamingCode && streaming.status !== "validating" && (
         <div className="mt-4">
           <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
             <pre className="text-green-400 text-sm font-mono">

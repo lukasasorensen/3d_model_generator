@@ -29,6 +29,7 @@ export interface Message {
   content: string;
   scadCode?: string;
   modelUrl?: string;
+  previewUrl?: string;
   format?: "stl" | "3mf";
   createdAt: string;
 }

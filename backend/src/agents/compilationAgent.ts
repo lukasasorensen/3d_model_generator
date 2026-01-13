@@ -6,19 +6,21 @@ import { logger } from "../infrastructure/logger/logger";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { AiClient } from "../clients/aiClient";
-import { z } from "zod/v3";
+import { config } from "../config/config";
 
 const execAsync = promisify(exec);
 
-const validatePreviewSchema = z.object({
-  status: z.enum(["ok", "update"]),
-  reason: z.string(),
-});
-
-type ValidatePreviewOutput = z.infer<typeof validatePreviewSchema>;
-
 export class VisionCheckError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public previewUrl: string,
+    public compiled: {
+      fileId: string;
+      outputPath: string;
+      modelUrl: string;
+      previewPath: string;
+    }
+  ) {
     super(message);
     this.name = "VisionCheckError";
   }
@@ -43,16 +45,19 @@ export class CompilationAgent {
     prompt,
     format = "stl",
     validate = false,
+    onValidationStart,
   }: {
     scadCode: string;
     prompt: string;
     format?: "stl" | "3mf";
     validate?: boolean;
+    onValidationStart?: (previewUrl: string) => void;
   }): Promise<{
     fileId: string;
     outputPath: string;
     modelUrl: string;
     previewPath: string;
+    previewUrl: string;
   }> {
     const { id: fileId, filePath: scadPath } =
       await this.fileStorage.saveScadFile(scadCode);
@@ -70,15 +75,25 @@ export class CompilationAgent {
 
     const previewPath = await this.generatePreview(scadPath, fileId);
 
-    if (validate) {
-      await this.validatePreview(prompt, previewPath);
-    }
-
-    return {
+    const previewUrl = `/api/previews/${fileId}.png`;
+    const compiled = {
       fileId,
       outputPath,
       modelUrl: `/api/models/${fileId}/${format}`,
       previewPath,
+    };
+
+    if (validate) {
+      onValidationStart?.(previewUrl);
+      await this.validatePreview(prompt, previewPath, previewUrl, compiled);
+    }
+
+    return {
+      fileId: compiled.fileId,
+      outputPath: compiled.outputPath,
+      modelUrl: compiled.modelUrl,
+      previewPath,
+      previewUrl,
     };
   }
 
@@ -110,24 +125,35 @@ export class CompilationAgent {
 
   private async validatePreview(
     prompt: string,
-    previewPath: string
+    previewPath: string,
+    previewUrl: string,
+    compiled: {
+      fileId: string;
+      outputPath: string;
+      modelUrl: string;
+      previewPath: string;
+    }
   ): Promise<void> {
     const imageBuffer = await fs.readFile(previewPath);
     const imageBase64 = imageBuffer.toString("base64");
+    const output = await this.aiClient.visionCompletion({
+      prompt:
+        "You are a strict QA for 3D models. Compare the user prompt to the rendered preview." +
+        ' Reply with JSON only: {"status":"ok"|"update","reason":"..."}.' +
+        ` Prompt: ${prompt}`,
+      imageBase64,
+      modelTier: "medium",
+    });
 
-    const verdict: ValidatePreviewOutput =
-      await this.aiClient.visionCompletion<ValidatePreviewOutput>({
-        prompt:
-          "You are a strict QA for 3D models. Compare the user prompt to the rendered preview." +
-          ' Reply with JSON only: {"status":"ok"|"update","reason":"..."}.' +
-          ` Prompt: ${prompt}`,
-        imageBase64,
-        modelTier: "medium",
-        structuredOutput: validatePreviewSchema,
-      });
-
-    if (!verdict.status) {
-      throw new Error("Invalid response from AI");
+    let verdict: { status?: string; reason?: string } = {};
+    if (typeof output === "string") {
+      try {
+        verdict = JSON.parse(output);
+      } catch {
+        verdict = { status: "update", reason: output || "Unclear response" };
+      }
+    } else {
+      verdict = output as { status?: string; reason?: string };
     }
 
     if (verdict.status === "ok") {
@@ -137,6 +163,6 @@ export class CompilationAgent {
     const reason =
       verdict.reason || "Visual check indicates the model needs updates";
     logger.warn("Vision QA requested update", { reason });
-    throw new VisionCheckError(reason);
+    throw new VisionCheckError(reason, previewUrl, compiled);
   }
 }

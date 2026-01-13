@@ -3,10 +3,17 @@ import { apiClient, ModelStreamEvent } from "../api/client";
 import { Conversation, ConversationListItem } from "../types";
 
 export interface StreamingState {
-  status: "idle" | "generating" | "compiling" | "completed" | "error";
+  status:
+    | "idle"
+    | "generating"
+    | "compiling"
+    | "validating"
+    | "completed"
+    | "error";
   streamingCode: string;
   streamingReasoning: string;
   statusMessage: string;
+  previewUrl?: string;
 }
 
 export function useConversations() {
@@ -194,6 +201,7 @@ export function useConversations() {
           streamingCode: "",
           streamingReasoning: "",
           statusMessage: event.message || "Starting...",
+          previewUrl: undefined,
         });
         break;
 
@@ -237,6 +245,16 @@ export function useConversations() {
           ...prev,
           status: "compiling",
           statusMessage: event.message || "Compiling...",
+          previewUrl: undefined,
+        }));
+        break;
+
+      case "validating":
+        setStreaming((prev) => ({
+          ...prev,
+          status: "validating",
+          statusMessage: event.message || "Validating...",
+          previewUrl: event.previewUrl,
         }));
         break;
 
@@ -248,6 +266,7 @@ export function useConversations() {
             streamingCode: event.data.message.scadCode || "",
             streamingReasoning: "",
             statusMessage: "Complete!",
+            previewUrl: event.data.message.previewUrl,
           });
         }
         break;

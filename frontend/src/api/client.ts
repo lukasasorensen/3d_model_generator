@@ -20,6 +20,7 @@ export interface ModelStreamEvent {
     | "tool_call_end"
     | "code_complete"
     | "compiling"
+    | "validating"
     | "completed"
     | "generation_error"
     | "error"
@@ -30,6 +31,7 @@ export interface ModelStreamEvent {
   data?: { conversation: Conversation | null; message: Message };
   error?: string;
   conversationId?: string;
+  previewUrl?: string;
   // Tool call fields
   toolCallId?: string;
   toolName?: string;
