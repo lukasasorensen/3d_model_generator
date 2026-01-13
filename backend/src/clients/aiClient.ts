@@ -1,3 +1,5 @@
+import { z } from "zod/v3";
+
 /**
  * Represents a message in the conversation.
  * Each AI client implementation converts these to their specific format.
@@ -12,6 +14,13 @@ export interface StreamCompletionParams {
   messages: InputMessage[];
   modelTier?: "tiny" | "small" | "medium" | "large" | "xlarge";
   reasoningEffort?: "none" | "low" | "medium" | "high";
+}
+
+export interface VisionCompletionParams<T = string> {
+  prompt: string;
+  imageBase64: string;
+  modelTier?: "tiny" | "small" | "medium" | "large" | "xlarge";
+  structuredOutput?: z.ZodType<T, any, any>;
 }
 
 /**
@@ -129,4 +138,12 @@ export abstract class AiClient {
     params: StreamCompletionParams,
     onEvent: StreamEventHandler
   ): Promise<void>;
+
+  /**
+   * Run a single-shot vision completion and return the raw text output.
+   * @param params - The vision completion parameters
+   */
+  abstract visionCompletion<T = string>(
+    params: VisionCompletionParams<T>
+  ): Promise<T>;
 }

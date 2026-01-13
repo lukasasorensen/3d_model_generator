@@ -1,36 +1,43 @@
 import { Response } from "express";
-import {
-  OpenScadAiService,
-  OpenScadStreamEvent,
-} from "../services/openScadAiService";
+import { OpenScadAiService } from "../services/openScadAiService";
 import { OpenSCADService } from "../services/openscadService";
 import { FileStorageService } from "../services/fileStorageService";
 import { ConversationService } from "../services/conversationService";
 import { logger } from "../infrastructure/logger/logger";
 import { SSE_EVENTS, writeAiStreamEvent, writeSse } from "../utils/sseUtils";
-import { config } from "../config/config";
-import { CodeGenerationAgent } from "./agents/codeGenerationAgent";
-import { RetryFeedbackAgent } from "./agents/retryFeedbackAgent";
+import { CodeGenerationAgent } from "../agents/codeGenerationAgent";
+import { RetryFeedbackAgent } from "../agents/retryFeedbackAgent";
+import { CompilationAgent } from "../agents/compilationAgent";
 import { AiClient } from "../clients/aiClient";
-import { CompilationAgent } from "./agents/compilationAgent";
+import { GenerationRetryRunner } from "../runners/generationRetryRunner";
 
 export class ModelWorkflow {
   private codeGenerationAgent: CodeGenerationAgent;
   private retryFeedbackAgent: RetryFeedbackAgent;
+  private compilationAgent: CompilationAgent;
+  private generationRetryRunner: GenerationRetryRunner;
   constructor(
     private conversationService: ConversationService,
     private openScadAiService: OpenScadAiService,
     private openscadService: OpenSCADService,
     private fileStorage: FileStorageService,
-    private aiCompilationAgent: CompilationAgent,
     private aiClient: AiClient
   ) {
     logger.debug("ModelWorkflow initialized");
-    this.codeGenerationAgent = new CodeGenerationAgent(
-      this.openScadAiService,
+    this.codeGenerationAgent = new CodeGenerationAgent(this.openScadAiService);
+    this.retryFeedbackAgent = new RetryFeedbackAgent(this.conversationService);
+    this.compilationAgent = new CompilationAgent(
+      this.openscadService,
+      this.fileStorage,
       this.aiClient
     );
-    this.retryFeedbackAgent = new RetryFeedbackAgent(this.conversationService);
+    this.generationRetryRunner = new GenerationRetryRunner(
+      this.conversationService,
+      this.codeGenerationAgent,
+      this.compilationAgent,
+      this.retryFeedbackAgent,
+      this.openscadService
+    );
   }
 
   async generateModelStream(
@@ -100,113 +107,68 @@ export class ModelWorkflow {
     format: "stl" | "3mf",
     isNewConversation: boolean
   ): Promise<void> {
-    const maxAttempts = Math.max(1, config.openscad.maxCompileRetries);
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      if (attempt === 1) {
-        writeSse(res, SSE_EVENTS.generationStart, {
-          message: "Generating OpenSCAD code...",
-        });
-      } else {
-        writeSse(res, SSE_EVENTS.generationStart, {
-          message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
-        });
-      }
-
-      const messages = await this.conversationService.getConversationMessages(
-        conversationId
-      );
-      logger.debug("Retrieved conversation messages for AI context", {
-        conversationId,
-        messageCount: messages.length,
-      });
-
-      let chunkCount = 0;
-      const scadCode = await this.codeGenerationAgent.generateCode(
-        messages,
-        (event: OpenScadStreamEvent) => {
-          if (event.type === "code_delta") {
-            chunkCount++;
+    const result = await this.generationRetryRunner.run(
+      conversationId,
+      prompt,
+      format,
+      {
+        onAttemptStart: (attempt, maxAttempts) => {
+          if (attempt === 1) {
+            writeSse(res, SSE_EVENTS.generationStart, {
+              message: "Generating OpenSCAD code...",
+            });
+          } else {
+            writeSse(res, SSE_EVENTS.generationStart, {
+              message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+            });
           }
+        },
+        onCompiling: () => {
+          writeSse(res, SSE_EVENTS.compiling, {
+            message: "Compiling with OpenSCAD...",
+          });
+        },
+        onStreamEvent: (event) => {
           writeAiStreamEvent(res, event);
-        }
-      );
-
-      logger.info("Code generation completed", {
-        conversationId,
-        codeLength: scadCode.length,
-        chunkCount,
-        attempt,
-      });
-
-      writeSse(res, SSE_EVENTS.compiling, {
-        message: "Compiling with OpenSCAD...",
-      });
-
-      try {
-        const { fileId, outputPath, modelUrl } =
-          await this.aiCompilationAgent.compileModel(scadCode, format);
-
-        logger.info("3D model compiled successfully", {
-          conversationId,
-          format,
-          outputPath,
-          attempt,
-        });
-
-        const assistantMessage =
-          await this.conversationService.addAssistantMessage(
-            conversationId,
-            isNewConversation
-              ? `Generated model for: ${prompt}`
-              : `Updated model for: ${prompt}`,
-            scadCode,
-            modelUrl,
-            format
-          );
-        logger.debug("Assistant message saved", {
-          conversationId,
-          messageId: assistantMessage.id,
-        });
-
-        const updatedConversation =
-          await this.conversationService.getConversation(conversationId);
-
-        writeSse(res, SSE_EVENTS.completed, {
-          data: {
-            conversation: updatedConversation,
-            message: assistantMessage,
-          },
-        });
-
-        logger.info("Model generation completed successfully", {
-          conversationId,
-          modelUrl,
-        });
-        return;
-      } catch (error: any) {
-        const rawMessage = error?.message || "OpenSCAD compilation error";
-        const parsed = this.openscadService.parseError(rawMessage);
-        logger.warn("OpenSCAD compilation failed", {
-          conversationId,
-          attempt,
-          error: rawMessage,
-        });
-
-        await this.retryFeedbackAgent.recordFailure(
-          conversationId,
-          scadCode,
-          format,
-          parsed.message
-        );
-
-        if (attempt === maxAttempts) {
-          throw new Error(
-            `Failed to compile OpenSCAD after ${maxAttempts} attempts: ${parsed.message}`
-          );
-        }
+        },
       }
-    }
+    );
+
+    logger.info("3D model compiled successfully", {
+      conversationId,
+      format,
+      outputPath: result.outputPath,
+    });
+
+    const assistantMessage = await this.conversationService.addAssistantMessage(
+      conversationId,
+      isNewConversation
+        ? `Generated model for: ${prompt}`
+        : `Updated model for: ${prompt}`,
+      result.scadCode,
+      result.modelUrl,
+      format
+    );
+    logger.debug("Assistant message saved", {
+      conversationId,
+      messageId: assistantMessage.id,
+    });
+
+    const updatedConversation = await this.conversationService.getConversation(
+      conversationId
+    );
+
+    writeSse(res, SSE_EVENTS.completed, {
+      data: {
+        conversation: updatedConversation,
+        message: assistantMessage,
+      },
+    });
+
+    logger.info("Model generation completed successfully", {
+      conversationId,
+      modelUrl: result.modelUrl,
+    });
   }
 
   async getModelFile(

@@ -4,11 +4,14 @@ import {
   InputMessage,
   StreamCompletionParams,
   StreamEventHandler,
+  VisionCompletionParams,
 } from "./aiClient";
 import { logger } from "../infrastructure/logger/logger";
 import { config } from "../config/config";
 import { ReasoningEffort } from "openai/resources/shared";
 import { ResponseStreamParams } from "openai/lib/responses/ResponseStream";
+import { ResponseCreateParams } from "openai/resources/responses/responses";
+import { zodTextFormat } from "openai/helpers/zod.js";
 
 /**
  * OpenAI implementation of the AI client.
@@ -84,7 +87,9 @@ export class OpenAiClient extends AiClient {
         new Map();
 
       for await (const event of stream) {
-        logger.debug("OpenAI event", { eventType: event.type });
+        if (event.type !== "response.output_text.delta") {
+          logger.debug("OpenAI event", { eventType: event.type });
+        }
 
         switch (event.type) {
           // Text output delta
@@ -209,6 +214,62 @@ export class OpenAiClient extends AiClient {
 
       throw new Error(`OpenAI API error: ${error.message}`);
     }
+  }
+
+  async visionCompletion<T = string>({
+    prompt,
+    imageBase64,
+    modelTier = "medium",
+    structuredOutput,
+  }: VisionCompletionParams<T>): Promise<T> {
+    logger.debug("Starting vision completion", {
+      promptLength: prompt.length,
+      imageSize: imageBase64.length,
+    });
+
+    const responseParams: ResponseCreateParams = {
+      model: this.getModelForTier(modelTier),
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: prompt },
+            {
+              type: "input_image",
+              image_url: `data:image/png;base64,${imageBase64}`,
+              detail: "auto",
+            },
+          ],
+        },
+      ],
+    };
+
+    if (structuredOutput) {
+      responseParams.text = {
+        format: zodTextFormat(structuredOutput, "structured_output"),
+      };
+    }
+
+    const response = await this.client.responses.create(responseParams);
+
+    const outputText =
+      (response as any).output_text ||
+      (response as any).output?.[0]?.content?.[0]?.text ||
+      "";
+
+    if (structuredOutput) {
+      try {
+        return JSON.parse(outputText) as T;
+      } catch {
+        logger.error("Invalid structured output", { outputText });
+      }
+    }
+
+    logger.debug("Vision completion received", {
+      outputLength: outputText.length,
+    });
+
+    return outputText as T;
   }
 
   private getModelForTier(

@@ -101,7 +101,8 @@ export function createApp() {
     conversationService,
     openScadAiService,
     openscadService,
-    fileStorage
+    fileStorage,
+    openAiClient
   );
   const conversationWorkflow = new ConversationWorkflow(conversationService);
   logger.debug("Workflows created successfully");
