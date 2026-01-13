@@ -15,6 +15,7 @@ interface GenerationAttemptCallbacks {
   ) => void;
   onCompiling: () => void;
   onValidating: (previewUrl: string) => void;
+  onValidationFailed: (reason: string, previewUrl: string) => void;
   onOutputting: () => void;
   onStreamEvent: (event: OpenScadStreamEvent) => void;
 }
@@ -41,14 +42,12 @@ export class GenerationRetryRunner {
     previewUrl: string;
   }> {
     const maxAttempts = Math.max(1, config.openscad.maxCompileRetries);
-    let lastCompiled:
-      | {
-          scadCode: string;
-          fileId: string;
-          previewUrl: string;
-          scadPath: string;
-        }
-      | null = null;
+    let lastCompiled: {
+      scadCode: string;
+      fileId: string;
+      previewUrl: string;
+      scadPath: string;
+    } | null = null;
     let lastFailure:
       | { type: "validation" | "compilation"; message: string }
       | undefined;
@@ -122,11 +121,12 @@ export class GenerationRetryRunner {
             error.previewUrl
           );
           lastFailure = { type: "validation", message: error.message };
-
-          if (attempt === maxAttempts) {
-            break;
-          }
-          continue;
+          callbacks.onValidationFailed(error.message, error.previewUrl);
+          throw new ValidationPendingError(
+            error.message,
+            error.previewUrl,
+            error.compiled
+          );
         }
 
         const rawMessage = error?.message || "OpenSCAD compilation error";
@@ -176,5 +176,20 @@ export class GenerationRetryRunner {
       fileId: lastCompiled.fileId,
       previewUrl: lastCompiled.previewUrl,
     };
+  }
+}
+
+export class ValidationPendingError extends Error {
+  constructor(
+    message: string,
+    public previewUrl: string,
+    public compiled: {
+      fileId: string;
+      previewPath: string;
+      scadPath: string;
+    }
+  ) {
+    super(message);
+    this.name = "ValidationPendingError";
   }
 }

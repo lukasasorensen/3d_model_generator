@@ -9,7 +9,10 @@ import { CodeGenerationAgent } from "../agents/codeGenerationAgent";
 import { RetryFeedbackAgent } from "../agents/retryFeedbackAgent";
 import { CompilationAgent } from "../agents/compilationAgent";
 import { AiClient } from "../clients/aiClient";
-import { GenerationRetryRunner } from "../runners/generationRetryRunner";
+import {
+  GenerationRetryRunner,
+  ValidationPendingError,
+} from "../runners/generationRetryRunner";
 
 export class ModelWorkflow {
   private codeGenerationAgent: CodeGenerationAgent;
@@ -107,51 +110,66 @@ export class ModelWorkflow {
     format: "stl" | "3mf",
     isNewConversation: boolean
   ): Promise<void> {
-    const result = await this.generationRetryRunner.run(
-      conversationId,
-      prompt,
-      format,
-      {
-        onAttemptStart: (attempt, maxAttempts, lastFailure) => {
-          if (attempt === 1) {
-            writeSse(res, SSE_EVENTS.generationStart, {
-              message: "Generating OpenSCAD code...",
-            });
-            return;
-          }
+    let result;
+    try {
+      result = await this.generationRetryRunner.run(
+        conversationId,
+        prompt,
+        format,
+        {
+          onAttemptStart: (attempt, maxAttempts, lastFailure) => {
+            if (attempt === 1) {
+              writeSse(res, SSE_EVENTS.generationStart, {
+                message: "Generating OpenSCAD code...",
+              });
+              return;
+            }
 
-          if (lastFailure?.type === "validation") {
-            writeSse(res, SSE_EVENTS.generationStart, {
-              message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
-            });
-            return;
-          }
+            if (lastFailure?.type === "validation") {
+              writeSse(res, SSE_EVENTS.generationStart, {
+                message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
+              });
+              return;
+            }
 
-          writeSse(res, SSE_EVENTS.generationStart, {
-            message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
-          });
-        },
-        onCompiling: () => {
-          writeSse(res, SSE_EVENTS.compiling, {
-            message: "Rendering preview...",
-          });
-        },
-        onValidating: (previewUrl) => {
-          writeSse(res, SSE_EVENTS.validating, {
-            message: "Validating preview...",
-            previewUrl,
-          });
-        },
-        onOutputting: () => {
-          writeSse(res, SSE_EVENTS.outputting, {
-            message: "Generating final model...",
-          });
-        },
-        onStreamEvent: (event) => {
-          writeAiStreamEvent(res, event);
-        },
+            writeSse(res, SSE_EVENTS.generationStart, {
+              message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+            });
+          },
+          onCompiling: () => {
+            writeSse(res, SSE_EVENTS.compiling, {
+              message: "Rendering preview...",
+            });
+          },
+          onValidating: (previewUrl) => {
+            writeSse(res, SSE_EVENTS.validating, {
+              message: "Validating preview...",
+              previewUrl,
+            });
+          },
+          onValidationFailed: (reason, previewUrl) => {
+            writeSse(res, SSE_EVENTS.validationFailed, {
+              message: "Preview validation found issues.",
+              reason,
+              previewUrl,
+            });
+          },
+          onOutputting: () => {
+            writeSse(res, SSE_EVENTS.outputting, {
+              message: "Generating final model...",
+            });
+          },
+          onStreamEvent: (event) => {
+            writeAiStreamEvent(res, event);
+          },
+        }
+      );
+    } catch (error: any) {
+      if (error instanceof ValidationPendingError) {
+        return;
       }
-    );
+      throw error;
+    }
 
     logger.info("3D model compiled successfully", {
       conversationId,
@@ -188,6 +206,60 @@ export class ModelWorkflow {
     logger.info("Model generation completed successfully", {
       conversationId,
       modelUrl: result.modelUrl,
+    });
+  }
+
+  async finalizeModelStream(
+    res: Response,
+    conversationId: string,
+    format: "stl" | "3mf"
+  ): Promise<void> {
+    const conversation = await this.conversationService.getConversation(
+      conversationId
+    );
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+
+    const lastAssistant = [...conversation.messages]
+      .reverse()
+      .find((msg) => msg.role === "assistant" && msg.scadCode);
+
+    if (!lastAssistant?.scadCode) {
+      throw new Error("No generated code available to finalize");
+    }
+
+    const { id: fileId, filePath: scadPath } =
+      await this.fileStorage.saveScadFile(lastAssistant.scadCode);
+
+    writeSse(res, SSE_EVENTS.outputting, {
+      message: "Generating final model...",
+    });
+
+    const output = await this.compilationAgent.generateOutput(
+      scadPath,
+      fileId,
+      format
+    );
+
+    const assistantMessage = await this.conversationService.addAssistantMessage(
+      conversationId,
+      "Generated final model.",
+      lastAssistant.scadCode,
+      output.modelUrl,
+      format,
+      lastAssistant.previewUrl
+    );
+
+    const updatedConversation = await this.conversationService.getConversation(
+      conversationId
+    );
+
+    writeSse(res, SSE_EVENTS.completed, {
+      data: {
+        conversation: updatedConversation,
+        message: assistantMessage,
+      },
     });
   }
 

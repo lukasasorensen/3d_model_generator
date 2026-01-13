@@ -1,7 +1,8 @@
 export interface ModelGenerationRequest {
-  prompt: string;
+  prompt?: string;
   format?: "stl" | "3mf";
   conversationId?: string;
+  action?: "generate" | "finalize";
 }
 
 export interface ModelGenerationResponse {

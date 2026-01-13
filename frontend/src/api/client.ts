@@ -22,6 +22,7 @@ export interface ModelStreamEvent {
     | "compiling"
     | "outputting"
     | "validating"
+    | "validation_failed"
     | "completed"
     | "generation_error"
     | "error"
@@ -33,6 +34,7 @@ export interface ModelStreamEvent {
   error?: string;
   conversationId?: string;
   previewUrl?: string;
+  reason?: string;
   // Tool call fields
   toolCallId?: string;
   toolName?: string;
@@ -131,11 +133,11 @@ async function streamRequest(
       const chunk = decoder.decode(value);
       const events = parseSSEEvents(chunk);
 
-        for (const { eventType, data } of events) {
-          const event: ModelStreamEvent = {
-            type: eventType as ModelStreamEvent["type"],
-            ...data,
-          };
+      for (const { eventType, data } of events) {
+        const event: ModelStreamEvent = {
+          type: eventType as ModelStreamEvent["type"],
+          ...data,
+        };
 
         onEvent(event);
 

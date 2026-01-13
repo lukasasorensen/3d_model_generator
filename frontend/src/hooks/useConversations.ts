@@ -30,6 +30,10 @@ export function useConversations() {
     streamingReasoning: "",
     statusMessage: "",
   });
+  const [validationPrompt, setValidationPrompt] = useState<{
+    reason: string;
+    previewUrl?: string;
+  } | null>(null);
   const currentConversationIdRef = useRef<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
@@ -75,6 +79,7 @@ export function useConversations() {
     async (prompt: string, format: "stl" | "3mf" = "stl") => {
       setLoading(true);
       setError(null);
+      setValidationPrompt(null);
       setStreaming({
         status: "idle",
         streamingCode: "",
@@ -127,6 +132,7 @@ export function useConversations() {
 
       setLoading(true);
       setError(null);
+      setValidationPrompt(null);
       currentConversationIdRef.current = activeConversation.id;
       setStreaming({
         status: "idle",
@@ -258,6 +264,19 @@ export function useConversations() {
         }));
         break;
 
+      case "validation_failed":
+        setValidationPrompt({
+          reason: event.reason || "Preview validation found issues.",
+          previewUrl: event.previewUrl,
+        });
+        setStreaming((prev) => ({
+          ...prev,
+          status: "validating",
+          statusMessage: event.message || "Preview validation found issues.",
+          previewUrl: event.previewUrl || prev.previewUrl,
+        }));
+        break;
+
       case "outputting":
         setStreaming((prev) => ({
           ...prev,
@@ -276,6 +295,7 @@ export function useConversations() {
             statusMessage: "Complete!",
             previewUrl: event.data.message.previewUrl,
           });
+          setValidationPrompt(null);
         }
         break;
 
@@ -301,6 +321,58 @@ export function useConversations() {
   );
 
   const clearError = useCallback(() => setError(null), []);
+  const clearValidationPrompt = useCallback(
+    () => setValidationPrompt(null),
+    []
+  );
+
+  const retryValidation = useCallback(
+    async (reason: string, format: "stl" | "3mf" = "stl") => {
+      setValidationPrompt(null);
+      await addMessage(
+        `The preview image does not match the request. Issues: ${reason}. Please fix the code and return the complete updated OpenSCAD source.`,
+        format
+      );
+    },
+    [addMessage]
+  );
+
+  const finalizeValidation = useCallback(
+    async (format: "stl" | "3mf" = "stl") => {
+      if (!activeConversation) {
+        return;
+      }
+      setValidationPrompt(null);
+      setLoading(true);
+      setStreaming({
+        status: "compiling",
+        streamingCode: "",
+        streamingReasoning: "",
+        statusMessage: "Generating final model...",
+      });
+      currentConversationIdRef.current = activeConversation.id;
+      try {
+        await apiClient.generateModelStream(
+          { conversationId: activeConversation.id, format, action: "finalize" },
+          (event: ModelStreamEvent) => {
+            handleStreamEvent(event);
+          }
+        );
+        await fetchConversations();
+      } catch (err: any) {
+        const errorMessage = err.message || "Failed to finalize model";
+        setError(errorMessage);
+        setStreaming((prev) => ({
+          ...prev,
+          status: "error",
+          statusMessage: errorMessage,
+        }));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeConversation, fetchConversations, handleStreamEvent]
+  );
 
   return {
     conversations,
@@ -308,6 +380,7 @@ export function useConversations() {
     loading,
     error,
     streaming,
+    validationPrompt,
     fetchConversations,
     loadConversation,
     startNewConversation,
@@ -315,5 +388,8 @@ export function useConversations() {
     addMessage,
     deleteConversation,
     clearError,
+    clearValidationPrompt,
+    retryValidation,
+    finalizeValidation,
   };
 }

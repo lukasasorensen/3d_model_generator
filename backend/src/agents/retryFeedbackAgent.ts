@@ -46,11 +46,6 @@ export class RetryFeedbackAgent {
       format,
       previewUrl
     );
-
-    await this.conversationService.addUserMessage(
-      conversationId,
-      `The preview image does not match the request. Error: ${errorMessage}. Please fix the code and return the complete updated OpenSCAD source.`
-    );
   }
 
   async recordCompilationFailure(

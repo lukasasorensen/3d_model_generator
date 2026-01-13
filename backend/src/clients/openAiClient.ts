@@ -11,7 +11,10 @@ import { config } from "../config/config";
 import { ReasoningEffort } from "openai/resources/shared";
 import { ResponseStreamParams } from "openai/lib/responses/ResponseStream";
 import { ResponseCreateParams } from "openai/resources/responses/responses";
-import { zodTextFormat } from "openai/helpers/zod.js";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { zodTextFormat } = require("openai/helpers/zod") as {
+  zodTextFormat: (schema: unknown, name: string) => unknown;
+};
 
 /**
  * OpenAI implementation of the AI client.
@@ -92,7 +95,8 @@ export class OpenAiClient extends AiClient {
         new Map();
 
       for await (const event of stream) {
-        if (event.type !== "response.output_text.delta") {
+        // dont include delta events in the logs as they are chunks of text that fill up the logs
+        if (!event.type.includes("delta")) {
           logger.debug("OpenAI event", { eventType: event.type });
         }
 
@@ -250,8 +254,8 @@ export class OpenAiClient extends AiClient {
     };
 
     if (structuredOutput) {
-      responseParams.text = {
-        format: zodTextFormat(structuredOutput, "structured_output") as any,
+      (responseParams as any).text = {
+        format: zodTextFormat(structuredOutput, "structured_output"),
       };
     }
 

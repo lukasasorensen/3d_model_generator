@@ -14,6 +14,7 @@ export const SSE_EVENTS = {
   compiling: "compiling",
   outputting: "outputting",
   validating: "validating",
+  validationFailed: "validation_failed",
   completed: "completed",
   error: "error",
 } as const;

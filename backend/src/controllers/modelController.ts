@@ -10,26 +10,32 @@ export class ModelController {
   }
 
   async generateModelStream(req: Request, res: Response): Promise<void> {
-    const { prompt, format = "stl", conversationId } =
-      req.body as ModelGenerationRequest;
-    if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
-      logger.warn("Invalid prompt provided for model generation");
-      res.status(400).json({
-        success: false,
-        error: "Prompt is required and must be a non-empty string",
-      });
-      return;
-    }
+    const {
+      prompt,
+      format = "stl",
+      conversationId,
+      action = "generate",
+    } = req.body as ModelGenerationRequest;
+    if (action !== "finalize") {
+      if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+        logger.warn("Invalid prompt provided for model generation");
+        res.status(400).json({
+          success: false,
+          error: "Prompt is required and must be a non-empty string",
+        });
+        return;
+      }
 
-    if (prompt.length > 1000) {
-      logger.warn("Prompt too long for model generation", {
-        promptLength: prompt.length,
-      });
-      res.status(400).json({
-        success: false,
-        error: "Prompt is too long (maximum 1000 characters)",
-      });
-      return;
+      if (prompt.length > 1000) {
+        logger.warn("Prompt too long for model generation", {
+          promptLength: prompt.length,
+        });
+        res.status(400).json({
+          success: false,
+          error: "Prompt is too long (maximum 1000 characters)",
+        });
+        return;
+      }
     }
 
     if (format !== "stl" && format !== "3mf") {
@@ -61,18 +67,32 @@ export class ModelController {
         });
         return;
       }
+    } else if (action === "finalize") {
+      res.status(400).json({
+        success: false,
+        error: "conversationId is required to finalize a model",
+      });
+      return;
     }
 
     setSseHeaders(res);
     logger.debug("SSE connection established for model generation");
 
     try {
-      await this.modelWorkflow.generateModelStream(
-        res,
-        prompt,
-        format,
-        conversationId
-      );
+      if (action === "finalize") {
+        await this.modelWorkflow.finalizeModelStream(
+          res,
+          conversationId as string,
+          format
+        );
+      } else {
+        await this.modelWorkflow.generateModelStream(
+          res,
+          prompt as string,
+          format,
+          conversationId
+        );
+      }
       res.end();
     } catch (error: any) {
       logger.error("Error generating model (streaming)", {
