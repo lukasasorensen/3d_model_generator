@@ -66,6 +66,7 @@ export class OpenAiClient extends AiClient {
         model: this.getModelForTier(modelTier ?? "small"),
         instructions: systemPrompt,
         input: openAiInput,
+        stream: true,
       };
 
       // only for gpt-5 models
@@ -75,6 +76,10 @@ export class OpenAiClient extends AiClient {
             reasoningEffort
           ) as ReasoningEffort,
         };
+
+        if (reasoningEffort !== "none") {
+          responseParams.reasoning.summary = "auto";
+        }
       }
 
       const stream = this.client.responses.stream(responseParams);
@@ -296,12 +301,13 @@ export class OpenAiClient extends AiClient {
   ): string {
     switch (reasoningEffort) {
       case "none":
-      case "low":
         return "minimal";
-      case "medium":
+      case "low":
         return "low";
-      case "high":
+      case "medium":
         return "medium";
+      case "high":
+        return "high";
       default:
         return "low";
     }

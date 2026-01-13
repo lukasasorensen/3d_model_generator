@@ -139,7 +139,7 @@ When modifying existing code based on follow-up requests:
         systemPrompt: this.systemPrompt,
         messages: inputMessages,
         modelTier: "medium",
-        reasoningEffort: "none",
+        reasoningEffort: "medium",
       },
       (event: StreamEvent) => {
         switch (event.type) {

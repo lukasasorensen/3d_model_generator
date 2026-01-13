@@ -109,6 +109,17 @@ export function StreamingCodeDisplay({ streaming }: StreamingCodeDisplayProps) {
         </div>
       )}
 
+      {streaming.streamingReasoning && (
+        <div className="mt-4">
+          <h4 className="text-xs uppercase tracking-wide text-slate-500 mb-2">
+            Reasoning
+          </h4>
+          <div className="bg-slate-100 text-slate-700 p-3 rounded text-xs whitespace-pre-wrap">
+            {streaming.streamingReasoning}
+          </div>
+        </div>
+      )}
+
       {streaming.status === "compiling" && (
         <div className="mt-4">
           <div className="flex items-center gap-2 text-yellow-700">
