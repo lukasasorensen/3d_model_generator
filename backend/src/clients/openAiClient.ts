@@ -246,7 +246,7 @@ export class OpenAiClient extends AiClient {
 
     if (structuredOutput) {
       responseParams.text = {
-        format: zodTextFormat(structuredOutput, "structured_output"),
+        format: zodTextFormat(structuredOutput, "structured_output") as any,
       };
     }
 

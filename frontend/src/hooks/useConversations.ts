@@ -32,7 +32,7 @@ export function useConversations() {
     } catch (err: any) {
       console.error("Failed to fetch conversations:", err);
     }
-  }, []);
+  }, [activeConversation]);
 
   const loadConversation = useCallback(async (id: string) => {
     setLoading(true);
@@ -168,10 +168,27 @@ export function useConversations() {
         if (event.conversationId) {
           currentConversationIdRef.current = event.conversationId;
         }
+        if (currentConversationIdRef.current) {
+          void apiClient
+            .getConversation(currentConversationIdRef.current)
+            .then(setActiveConversation)
+            .catch(() => undefined);
+        }
         // Conversation created, waiting for generation
         break;
 
       case "generation_start":
+        if (currentConversationIdRef.current) {
+          const shouldRefresh =
+            !activeConversation ||
+            (event.message || "").toLowerCase().includes("retrying");
+          if (shouldRefresh) {
+            void apiClient
+              .getConversation(currentConversationIdRef.current)
+              .then(setActiveConversation)
+              .catch(() => undefined);
+          }
+        }
         setStreaming({
           status: "generating",
           streamingCode: "",

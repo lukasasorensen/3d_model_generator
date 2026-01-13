@@ -1,11 +1,24 @@
+import { useEffect, useRef } from "react";
 import { Conversation, Message } from "../types";
 import { ModelViewer } from "./ModelViewer";
+import { StreamingCodeDisplay } from "./StreamingCodeDisplay";
+import { StreamingState } from "../hooks/useConversations";
 
 interface ConversationViewProps {
   conversation: Conversation;
+  streaming?: StreamingState;
 }
 
-export function ConversationView({ conversation }: ConversationViewProps) {
+export function ConversationView({
+  conversation,
+  streaming,
+}: ConversationViewProps) {
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversation.messages.length, streaming?.streamingCode, streaming?.status]);
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
@@ -20,6 +33,12 @@ export function ConversationView({ conversation }: ConversationViewProps) {
           ))}
         </div>
       </div>
+      {streaming && streaming.status !== "idle" && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <StreamingCodeDisplay streaming={streaming} />
+        </div>
+      )}
+      <div ref={bottomRef} />
     </div>
   );
 }

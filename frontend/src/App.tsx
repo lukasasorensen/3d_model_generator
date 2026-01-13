@@ -1,6 +1,5 @@
 import { PromptInput } from "./components/PromptInput";
 import { ErrorDisplay } from "./components/ErrorDisplay";
-import { StreamingCodeDisplay } from "./components/StreamingCodeDisplay";
 import { ConversationSidebar } from "./components/ConversationSidebar";
 import { ConversationView } from "./components/ConversationView";
 import { useConversations } from "./hooks/useConversations";
@@ -66,15 +65,13 @@ export default function App() {
             {/* Error Display */}
             {error && <ErrorDisplay message={error} onDismiss={clearError} />}
 
-            {/* Streaming Display */}
-            {isStreaming && <StreamingCodeDisplay streaming={streaming} />}
-
-            {/* Conversation View (when completed) */}
-            {activeConversation &&
-              streaming.status !== "generating" &&
-              streaming.status !== "compiling" && (
-                <ConversationView conversation={activeConversation} />
-              )}
+            {/* Conversation View */}
+            {activeConversation && (
+              <ConversationView
+                conversation={activeConversation}
+                streaming={streaming}
+              />
+            )}
 
             {/* Empty State */}
             {!hasActiveConversation && !isStreaming && (
