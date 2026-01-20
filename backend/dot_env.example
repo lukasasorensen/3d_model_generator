@@ -1,0 +1,38 @@
+# Server
+PORT=3001
+NODE_ENV=development
+
+# OpenAI
+OPENAI_API_KEY=sk-your-api-key-here
+
+# PostgreSQL Connection
+POSTGRES_USERNAME=ai_openscad
+POSTGRES_PASSWORD=ai_openscad_dev
+POSTGRES_DB=ai_openscad
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+
+# Prisma DATABASE_URL (constructed from above variables)
+DATABASE_URL=postgresql://ai_openscad:ai_openscad_dev@localhost:5432/ai_openscad
+
+# OpenSCAD
+OPENSCAD_MAX_RETRIES=2
+
+# Logging
+LOG_LEVEL=info
+LOG_TO_FILE=false
+LOG_FILE_PATH=logs/app.log
+MAX_LOG_FILE_SIZE=5242880
+MAX_LOG_FILE_COUNT=5
+
+# OpenTelemetry (Observability)
+OTEL_ENABLED=true
+OTEL_SERVICE_NAME=openscad-ai-backend
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTEL_DEBUG=false
+
+# Grafana LGTM Stack (Docker)
+GRAFANA_PORT=3737
+OTLP_GRPC_PORT=4317
+OTLP_HTTP_PORT=4318
+GRAFANA_ADMIN_PASSWORD=admin

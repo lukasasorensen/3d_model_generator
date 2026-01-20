@@ -33,6 +33,12 @@ export interface Config {
   openscad: {
     maxCompileRetries: number;
   };
+  otel: {
+    enabled: boolean;
+    serviceName: string;
+    otlpEndpoint: string;
+    debug: boolean;
+  };
 }
 
 export const config: Config = {
@@ -67,5 +73,13 @@ export const config: Config = {
   },
   openscad: {
     maxCompileRetries: parseInt(process.env.OPENSCAD_MAX_RETRIES || "2"),
+  },
+  otel: {
+    enabled: process.env.OTEL_ENABLED === "true",
+    serviceName: process.env.OTEL_SERVICE_NAME || "openscad-ai-backend",
+    otlpEndpoint:
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+      `http://localhost:${process.env.OTLP_GRPC_PORT || "4317"}`,
+    debug: process.env.OTEL_DEBUG === "true",
   },
 };

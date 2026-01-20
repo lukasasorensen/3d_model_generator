@@ -16,5 +16,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # Grafana LGTM Stack (Loki, Grafana, Tempo, Mimir) with OpenTelemetry Collector
+  # Provides observability for traces, metrics, and logs
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: openscad-otel-lgtm
+    ports:
+      - "${GRAFANA_PORT:-3737}:3000" # Grafana UI
+      - "${OTLP_GRPC_PORT:-4317}:4317" # OTLP gRPC receiver
+      - "${OTLP_HTTP_PORT:-4318}:4318" # OTLP HTTP receiver
+    volumes:
+      - lgtm_data:/data
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    healthcheck:
+      test:
+        ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+  lgtm_data:

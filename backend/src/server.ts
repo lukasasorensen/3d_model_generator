@@ -1,3 +1,6 @@
+// OpenTelemetry instrumentation must be imported first
+import "./instrumentation";
+
 import { createApp } from "./app";
 import { OpenSCADService } from "./services/openscadService";
 import * as path from "path";
@@ -92,6 +95,9 @@ async function startServer() {
     logger.info("OpenSCAD installation: ✓");
     logger.info("OpenAI API key: ✓");
     logger.info("Database: ✓");
+    logger.info(
+      `OpenTelemetry: ${config.otel.enabled ? "✓ (" + config.otel.otlpEndpoint + ")" : "disabled"}`
+    );
     logger.info("Ready to generate 3D models!");
     logger.info("========================================");
   });

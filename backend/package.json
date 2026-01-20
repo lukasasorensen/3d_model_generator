@@ -16,6 +16,14 @@
     "db:down": "docker-compose -f docker-compose.yml down"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.47.0",
+    "@opentelemetry/exporter-logs-otlp-grpc": "^0.52.0",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.52.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.52.0",
+    "@opentelemetry/instrumentation-winston": "^0.38.0",
+    "@opentelemetry/sdk-node": "^0.52.0",
+    "@opentelemetry/winston-transport": "^0.20.0",
     "@prisma/client": "^5.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
