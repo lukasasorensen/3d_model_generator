@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { ModelGenerationRequest } from "../../../shared/src/types/model";
 import { logger } from "../infrastructure/logger/logger";
 import { SSE_EVENTS, setSseHeaders, writeSse } from "../utils/sseUtils";
-import { ModelWorkflow } from "../workflows/modelWorkflow";
+import { ModelWorkflow } from "../workflows/modelWorkflows";
 
 export class ModelController {
   constructor(private modelWorkflow: ModelWorkflow) {
@@ -16,7 +16,7 @@ export class ModelController {
       conversationId,
       action = "generate",
     } = req.body as ModelGenerationRequest;
-    if (action !== "finalize" && action !== "validate") {
+    if (action !== "finalize" && action !== "reject_preview_and_retry") {
       if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
         logger.warn("Invalid prompt provided for model generation");
         res.status(400).json({
@@ -67,7 +67,7 @@ export class ModelController {
         });
         return;
       }
-    } else if (action === "finalize" || action === "validate") {
+    } else if (action === "finalize" || action === "reject_preview_and_retry") {
       res.status(400).json({
         success: false,
         error: `conversationId is required to ${action} a model`,
@@ -85,7 +85,7 @@ export class ModelController {
           conversationId as string,
           format
         );
-      } else if (action === "validate") {
+      } else if (action === "reject_preview_and_retry") {
         await this.modelWorkflow.validateAndRetryStream(
           res,
           conversationId as string,

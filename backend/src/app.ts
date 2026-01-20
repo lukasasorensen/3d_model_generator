@@ -11,7 +11,7 @@ import { FileStorageService } from "./services/fileStorageService";
 import { ConversationService } from "./services/conversationService";
 import { ModelController } from "./controllers/modelController";
 import { ConversationController } from "./controllers/conversationController";
-import { ModelWorkflow } from "./workflows/modelWorkflow";
+import { ModelWorkflow } from "./workflows/modelWorkflows";
 import * as path from "path";
 import { config } from "./config/config";
 import { logger } from "./infrastructure/logger/logger";

@@ -2,7 +2,7 @@ export interface ModelGenerationRequest {
   prompt?: string;
   format?: "stl" | "3mf";
   conversationId?: string;
-  action?: "generate" | "finalize" | "validate";
+  action?: "generate" | "finalize" | "reject_preview_and_retry";
 }
 
 export interface ModelGenerationResponse {
