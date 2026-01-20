@@ -17,6 +17,7 @@ An AI-powered 3D model generator that converts natural language descriptions int
 - **Backend**: Node.js + TypeScript + Express + OpenAI SDK + Prisma
 - **Database**: PostgreSQL (via Docker)
 - **3D Generation**: OpenSCAD CLI
+- **Observability**: OpenTelemetry + Grafana LGTM (Loki, Tempo, Mimir)
 - **Monorepo**: npm workspaces with shared types
 
 ## Prerequisites
@@ -347,6 +348,139 @@ docker exec -it openscad-postgres psql -U ai_openscad -d ai_openscad
 
 Replace the username and database name with your configured values from `.env`.
 
+## Observability (OpenTelemetry)
+
+The backend includes OpenTelemetry instrumentation for traces, metrics, and logs, with a local Grafana LGTM stack for development.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Backend (Node.js)                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │   Express   │  │   Winston   │  │   Prisma    │              │
+│  │   (HTTP)    │  │  (Logging)  │  │    (DB)     │              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+│         │                │                │                      │
+│         └────────────────┼────────────────┘                      │
+│                          ▼                                       │
+│              ┌───────────────────────┐                           │
+│              │   OpenTelemetry SDK   │                           │
+│              │  (auto-instrumented)  │                           │
+│              └───────────┬───────────┘                           │
+└──────────────────────────┼──────────────────────────────────────┘
+                           │ OTLP (gRPC :4317)
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  grafana/otel-lgtm Container                    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │    Tempo    │  │    Loki     │  │    Mimir    │              │
+│  │  (Traces)   │  │   (Logs)    │  │  (Metrics)  │              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+│         └────────────────┼────────────────┘                      │
+│                          ▼                                       │
+│              ┌───────────────────────┐                           │
+│              │    Grafana UI (:3737) │                           │
+│              └───────────────────────┘                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### What's Instrumented
+
+- **HTTP requests**: All Express routes are traced (except `/health`)
+- **Database queries**: Prisma/PostgreSQL queries are captured as spans
+- **Logs**: Winston logs are correlated with trace IDs for easy debugging
+- **Metrics**: Request counts, latencies, and Node.js runtime metrics
+
+### Enabling Telemetry
+
+1. **Add environment variables to `backend/.env`:**
+
+   ```env
+   # OpenTelemetry
+   OTEL_ENABLED=true
+   OTEL_SERVICE_NAME=openscad-ai-backend
+   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+   
+   # Optional: Grafana LGTM ports (defaults shown)
+   GRAFANA_PORT=3737
+   OTLP_GRPC_PORT=4317
+   OTLP_HTTP_PORT=4318
+   GRAFANA_ADMIN_PASSWORD=admin
+   ```
+
+2. **Start the observability stack:**
+
+   ```bash
+   npm run db:up
+   ```
+
+   This starts both PostgreSQL and the Grafana LGTM container.
+
+3. **Start the backend:**
+
+   ```bash
+   npm run dev:backend
+   ```
+
+   You should see `[OTEL] OpenTelemetry instrumentation started successfully` in the logs.
+
+### Accessing Grafana
+
+Open http://localhost:3737 (or your configured `GRAFANA_PORT`).
+
+- **Default credentials**: admin / admin (or your `GRAFANA_ADMIN_PASSWORD`)
+
+### Exploring Telemetry Data
+
+#### Traces (Tempo)
+
+1. Go to **Explore** → Select **Tempo** datasource
+2. Search by trace ID or use the **Search** tab to find traces
+3. Click on a trace to see the full request flow with timing
+
+#### Logs (Loki)
+
+1. Go to **Explore** → Select **Loki** datasource
+2. Use LogQL queries:
+   - `{service_name="openscad-ai-backend"}` - all backend logs
+   - `{service_name="openscad-ai-backend"} |= "error"` - error logs
+   - `{service_name="openscad-ai-backend"} | json | trace_id="<id>"` - logs for a specific trace
+
+#### Metrics (Mimir)
+
+1. Go to **Explore** → Select **Mimir** datasource
+2. Use PromQL queries:
+   - `http_server_duration_seconds_bucket` - request latency histogram
+   - `http_server_request_count_total` - request counts
+
+### Log Correlation
+
+When OpenTelemetry is enabled, all Winston log messages include trace context. In the console output, you'll see abbreviated trace IDs:
+
+```
+2024-01-15T10:30:00.000Z [info] [trace:a1b2c3d4]: Incoming request {...}
+```
+
+You can use this trace ID to find the full trace in Grafana Tempo and see all related logs in Loki.
+
+### Configuration Reference
+
+| Variable                      | Default                    | Description                          |
+| ----------------------------- | -------------------------- | ------------------------------------ |
+| `OTEL_ENABLED`                | `false`                    | Enable/disable OpenTelemetry        |
+| `OTEL_SERVICE_NAME`           | `openscad-ai-backend`      | Service name in traces/metrics      |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317`    | OTLP collector endpoint             |
+| `OTEL_DEBUG`                  | `false`                    | Enable OTel SDK debug logging       |
+| `GRAFANA_PORT`                | `3737`                     | Grafana UI port                     |
+| `OTLP_GRPC_PORT`              | `4317`                     | OTLP gRPC receiver port             |
+| `OTLP_HTTP_PORT`              | `4318`                     | OTLP HTTP receiver port             |
+| `GRAFANA_ADMIN_PASSWORD`      | `admin`                    | Grafana admin password              |
+
+### Disabling Telemetry
+
+Simply set `OTEL_ENABLED=false` or remove it from your `.env`. The application will start without OpenTelemetry instrumentation.
+
 ## Troubleshooting
 
 ### OpenSCAD not found
@@ -405,6 +539,27 @@ npm run db:push
 
 **Solution:** Check the browser console for CORS errors. Make sure the backend is running and accessible.
 
+### OpenTelemetry not sending data
+
+**Error:** No traces/logs appearing in Grafana
+
+**Solution:**
+
+1. Verify `OTEL_ENABLED=true` is set in `backend/.env`
+2. Check that the LGTM container is running: `docker ps | grep otel-lgtm`
+3. Verify the endpoint matches: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`
+4. Enable debug logging with `OTEL_DEBUG=true` to see SDK output
+
+### Grafana not accessible
+
+**Error:** Cannot connect to http://localhost:3737
+
+**Solution:**
+
+1. Check the container is running: `docker ps | grep otel-lgtm`
+2. View container logs: `docker logs openscad-otel-lgtm`
+3. Verify the port mapping in `docker-compose.yml` or check your `GRAFANA_PORT` setting
+
 ## Development
 
 ### Building for Production
@@ -434,3 +589,5 @@ MIT
 - [Prisma](https://www.prisma.io/) - Next-generation ORM for Node.js
 - [react-three-fiber](https://docs.pmnd.rs/react-three-fiber/) - React renderer for three.js
 - [Three.js](https://threejs.org/) - JavaScript 3D library
+- [OpenTelemetry](https://opentelemetry.io/) - Observability framework
+- [Grafana](https://grafana.com/) - Observability platform (LGTM stack)
