@@ -12,7 +12,6 @@ import { ConversationService } from "./services/conversationService";
 import { ModelController } from "./controllers/modelController";
 import { ConversationController } from "./controllers/conversationController";
 import { ModelWorkflow } from "./workflows/modelWorkflow";
-import { ConversationWorkflow } from "./workflows/conversationWorkflow";
 import * as path from "path";
 import { config } from "./config/config";
 import { logger } from "./infrastructure/logger/logger";
@@ -105,14 +104,11 @@ export function createApp() {
     fileStorage,
     openAiClient
   );
-  const conversationWorkflow = new ConversationWorkflow(conversationService);
   logger.debug("Workflows created successfully");
 
   logger.debug("Creating controllers");
   const modelController = new ModelController(modelWorkflow);
-  const conversationController = new ConversationController(
-    conversationWorkflow
-  );
+  const conversationController = new ConversationController(conversationService);
   logger.debug("Controllers created successfully");
 
   logger.debug("Registering routes");

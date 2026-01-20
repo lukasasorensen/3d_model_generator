@@ -1,15 +1,19 @@
 import { Request, Response } from "express";
 import { logger } from "../infrastructure/logger/logger";
-import { ConversationWorkflow } from "../workflows/conversationWorkflow";
+import { ConversationService } from "../services/conversationService";
 
 export class ConversationController {
-  constructor(private conversationWorkflow: ConversationWorkflow) {
+  constructor(private conversationService: ConversationService) {
     logger.debug("ConversationController initialized");
   }
 
   async listConversations(req: Request, res: Response): Promise<void> {
     try {
-      const conversations = await this.conversationWorkflow.listConversations();
+      logger.info("Listing all conversations");
+      const conversations = await this.conversationService.listConversations();
+      logger.info("Conversations listed successfully", {
+        count: conversations.length,
+      });
       res.json({
         success: true,
         data: conversations,
@@ -30,8 +34,10 @@ export class ConversationController {
     const { id } = req.params;
 
     try {
-      const conversation = await this.conversationWorkflow.getConversation(id);
+      logger.info("Getting conversation", { conversationId: id });
+      const conversation = await this.conversationService.getConversation(id);
       if (!conversation) {
+        logger.warn("Conversation not found", { conversationId: id });
         res.status(404).json({
           success: false,
           error: "Conversation not found",
@@ -39,6 +45,10 @@ export class ConversationController {
         return;
       }
 
+      logger.info("Conversation retrieved successfully", {
+        conversationId: id,
+        messageCount: conversation.messages.length,
+      });
       res.json({
         success: true,
         data: conversation,
@@ -60,8 +70,10 @@ export class ConversationController {
     const { id } = req.params;
 
     try {
-      const deleted = await this.conversationWorkflow.deleteConversation(id);
-      if (!deleted) {
+      logger.info("Deleting conversation", { conversationId: id });
+      const conversation = await this.conversationService.getConversation(id);
+      if (!conversation) {
+        logger.warn("Conversation not found for deletion", { conversationId: id });
         res.status(404).json({
           success: false,
           error: "Conversation not found",
@@ -69,6 +81,8 @@ export class ConversationController {
         return;
       }
 
+      await this.conversationService.deleteConversation(id);
+      logger.info("Conversation deleted successfully", { conversationId: id });
       res.json({
         success: true,
         message: "Conversation deleted",
