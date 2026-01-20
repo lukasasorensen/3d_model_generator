@@ -28,6 +28,6 @@ export const legacyApiClient = {
     request: ModelGenerationRequest,
     onEvent: (event: ModelStreamEvent) => void
   ) => streamingService.generateModelStream(request, onEvent),
-  
+
   getModelUrl: streamingService.getModelUrl,
 };

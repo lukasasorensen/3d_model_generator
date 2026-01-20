@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { OpenScadAiService } from "../services/openScadAiService";
+import { OpenScadAiService, OpenScadStreamEvent } from "../services/openScadAiService";
 import { OpenSCADService } from "../services/openscadService";
 import { FileStorageService } from "../services/fileStorageService";
 import { ConversationService } from "../services/conversationService";
@@ -9,13 +9,28 @@ import { CodeGenerationAgent } from "../agents/codeGenerationAgent";
 import { RetryFeedbackAgent } from "../agents/retryFeedbackAgent";
 import { CompilationAgent } from "../agents/compilationAgent";
 import { AiClient } from "../clients/aiClient";
-import { GenerationRetryRunner } from "../runners/generationRetryRunner";
+import { RetryRunner } from "../runners/retryRunner";
+import { config } from "../config/config";
+
+interface GenerationFailure {
+  type: "validation" | "compilation";
+  message: string;
+}
+
+interface PreviewResult {
+  scadCode: string;
+  fileId: string;
+  previewUrl: string;
+  scadPath: string;
+  previewPath: string;
+}
 
 export class ModelWorkflow {
   private codeGenerationAgent: CodeGenerationAgent;
   private retryFeedbackAgent: RetryFeedbackAgent;
   private compilationAgent: CompilationAgent;
-  private generationRetryRunner: GenerationRetryRunner;
+  private retryRunner: RetryRunner;
+
   constructor(
     private conversationService: ConversationService,
     private openScadAiService: OpenScadAiService,
@@ -27,13 +42,7 @@ export class ModelWorkflow {
     this.codeGenerationAgent = new CodeGenerationAgent(this.openScadAiService);
     this.retryFeedbackAgent = new RetryFeedbackAgent(this.conversationService);
     this.compilationAgent = new CompilationAgent(this.aiClient);
-    this.generationRetryRunner = new GenerationRetryRunner(
-      this.conversationService,
-      this.codeGenerationAgent,
-      this.compilationAgent,
-      this.retryFeedbackAgent,
-      this.openscadService
-    );
+    this.retryRunner = new RetryRunner();
   }
 
   async generateModelStream(
@@ -103,65 +112,125 @@ export class ModelWorkflow {
     format: "stl" | "3mf",
     isNewConversation: boolean
   ): Promise<void> {
-    const result = await this.generationRetryRunner.run(
-      conversationId,
-      prompt,
-      format,
-      {
-        onAttemptStart: (attempt, maxAttempts, lastFailure) => {
-          if (attempt === 1) {
-            writeSse(res, SSE_EVENTS.generationStart, {
-              message: "Generating OpenSCAD code...",
-            });
-            return;
-          }
+    const maxAttempts = Math.max(1, config.openscad.maxCompileRetries);
 
-          if (lastFailure?.type === "validation") {
-            writeSse(res, SSE_EVENTS.generationStart, {
-              message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
-            });
-            return;
-          }
+    const result = await this.retryRunner.run<PreviewResult, GenerationFailure>(
+      async (context) => {
+        // Notify attempt start
+        this.handleAttemptStart(res, context.attempt, context.maxAttempts, context.lastFailure);
 
-          writeSse(res, SSE_EVENTS.generationStart, {
-            message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
-          });
-        },
-        onCompiling: () => {
-          writeSse(res, SSE_EVENTS.compiling, {
-            message: "Rendering preview...",
-          });
-        },
-        onPreviewReady: (previewUrl, fileId) => {
+        // Get conversation messages for AI context
+        const messages = await this.conversationService.getConversationMessages(conversationId);
+        logger.debug("Retrieved conversation messages for AI context", {
+          conversationId,
+          messageCount: messages.length,
+        });
+
+        // Generate code
+        let chunkCount = 0;
+        const scadCode = await this.codeGenerationAgent.generateCode(
+          messages,
+          (event: OpenScadStreamEvent) => {
+            if (event.type === "code_delta") {
+              chunkCount++;
+            }
+            writeAiStreamEvent(res, event);
+          }
+        );
+
+        logger.info("Code generation completed", {
+          conversationId,
+          codeLength: scadCode.length,
+          chunkCount,
+          attempt: context.attempt,
+        });
+
+        // Compile preview
+        writeSse(res, SSE_EVENTS.compiling, {
+          message: "Rendering preview...",
+        });
+
+        try {
+          const previewResult = await this.openscadService.previewModel({ scadCode });
+
+          // Preview compiled successfully
           writeSse(res, SSE_EVENTS.previewReady, {
             message: "Preview ready - awaiting approval",
-            previewUrl,
-            fileId,
+            previewUrl: previewResult.previewUrl,
+            fileId: previewResult.fileId,
           });
-        },
-        onStreamEvent: (event) => {
-          writeAiStreamEvent(res, event);
-        },
-      }
+
+          return {
+            scadCode,
+            fileId: previewResult.fileId,
+            previewUrl: previewResult.previewUrl,
+            scadPath: previewResult.scadPath,
+            previewPath: previewResult.previewPath,
+          };
+        } catch (error: any) {
+          const rawMessage = error?.message || "OpenSCAD compilation error";
+          const parsed = this.openscadService.parseError(rawMessage);
+          logger.warn("OpenSCAD compilation failed", {
+            conversationId,
+            attempt: context.attempt,
+            error: rawMessage,
+          });
+
+          await this.retryFeedbackAgent.recordFailure(
+            "compilation",
+            conversationId,
+            scadCode,
+            format,
+            parsed.message
+          );
+
+          const failure: GenerationFailure = { type: "compilation", message: parsed.message };
+          throw failure;
+        }
+      },
+      { maxAttempts }
     );
 
     // Preview is ready - save to conversation for later finalization
-    if (result.status === "preview_ready") {
-      await this.conversationService.addAssistantMessage(
-        conversationId,
-        isNewConversation
-          ? `Generated preview for: ${prompt}`
-          : `Updated preview for: ${prompt}`,
-        result.scadCode,
-        undefined, // No model URL yet
-        format,
-        result.previewUrl
-      );
-      logger.info("Preview ready - awaiting user approval", {
-        conversationId,
-        previewUrl: result.previewUrl,
+    await this.conversationService.addAssistantMessage(
+      conversationId,
+      isNewConversation
+        ? `Generated preview for: ${prompt}`
+        : `Updated preview for: ${prompt}`,
+      result.scadCode,
+      undefined, // No model URL yet
+      format,
+      result.previewUrl
+    );
+    logger.info("Preview ready - awaiting user approval", {
+      conversationId,
+      previewUrl: result.previewUrl,
+    });
+  }
+
+  private handleAttemptStart(
+    res: Response,
+    attempt: number,
+    maxAttempts: number,
+    lastFailure?: GenerationFailure
+  ): void {
+    if (attempt === 1) {
+      writeSse(res, SSE_EVENTS.generationStart, {
+        message: "Generating OpenSCAD code...",
       });
+      return;
     }
+
+    if (lastFailure?.type === "validation") {
+      writeSse(res, SSE_EVENTS.generationStart, {
+        message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
+      });
+      return;
+    }
+
+    writeSse(res, SSE_EVENTS.generationStart, {
+      message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+    });
   }
 
   async finalizeModelStream(
