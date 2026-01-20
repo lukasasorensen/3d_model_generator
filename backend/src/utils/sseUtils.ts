@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { OpenScadStreamEvent } from "../services/openScadAiService";
+import { OpenScadStreamEvent } from "../agents/codeGenerationAgent";
 
 export const SSE_EVENTS = {
   conversationCreated: "conversation_created",

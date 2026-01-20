@@ -4,18 +4,16 @@ import { FileStorageService } from "../../services/fileStorageService";
 import { ConversationService } from "../../services/conversationService";
 import { SSE_EVENTS, writeSse } from "../../utils/sseUtils";
 import { AiClient } from "../../clients/aiClient";
-import { OpenScadAiService } from "../../services/openScadAiService";
 import { ModelWorkflow } from "./modelWorkflow";
 
 export class FinalizeModelWorkflow extends ModelWorkflow {
   constructor(
     conversationService: ConversationService,
-    openScadAiService: OpenScadAiService,
     openscadService: OpenSCADService,
     fileStorage: FileStorageService,
     aiClient: AiClient
   ) {
-    super(conversationService, openScadAiService, openscadService, fileStorage, aiClient);
+    super(conversationService, openscadService, fileStorage, aiClient);
   }
 
   async getConversation(conversationId: string) {

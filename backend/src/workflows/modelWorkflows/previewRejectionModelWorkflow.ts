@@ -6,17 +6,15 @@ import { logger } from "../../infrastructure/logger/logger";
 import { SSE_EVENTS, writeSse } from "../../utils/sseUtils";
 import { AiClient } from "../../clients/aiClient";
 import { FinalizeModelWorkflow } from "./finalizeModelWorkflow";
-import { OpenScadAiService } from "../../services/openScadAiService";
 
 export class PreviewRejectionModelWorkflow extends FinalizeModelWorkflow {
   constructor(
     conversationService: ConversationService,
-    openScadAiService: OpenScadAiService,
     openscadService: OpenSCADService,
     fileStorage: FileStorageService,
     aiClient: AiClient
   ) {
-    super(conversationService, openScadAiService, openscadService, fileStorage, aiClient);
+    super(conversationService, openscadService, fileStorage, aiClient);
   }
 
   async rejectAndRetryStream(

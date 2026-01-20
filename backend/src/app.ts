@@ -5,7 +5,6 @@ import { createModelRoutes } from "./routes/models";
 import { createConversationRoutes } from "./routes/conversations";
 import { errorHandler } from "./middleware/errorHandler";
 import { OpenAiClient } from "./clients/openAiClient";
-import { OpenScadAiService } from "./services/openScadAiService";
 import { OpenSCADService } from "./services/openscadService";
 import { FileStorageService } from "./services/fileStorageService";
 import { ConversationService } from "./services/conversationService";
@@ -83,7 +82,6 @@ export function createApp() {
 
   logger.debug("Creating services");
   const openAiClient = new OpenAiClient(config.openai.apiKey);
-  const openScadAiService = new OpenScadAiService(openAiClient);
   const fileStorage = new FileStorageService(
     path.join(__dirname, "../generated/scad"),
     path.join(__dirname, "../generated/stl"),
@@ -99,7 +97,6 @@ export function createApp() {
   logger.debug("Creating workflows");
   const modelWorkflow = new ModelWorkflow(
     conversationService,
-    openScadAiService,
     openscadService,
     fileStorage,
     openAiClient

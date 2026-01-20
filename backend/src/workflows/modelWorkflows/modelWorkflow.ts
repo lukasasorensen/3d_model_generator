@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { OpenScadAiService, OpenScadStreamEvent } from "../../services/openScadAiService";
+import { OpenScadStreamEvent } from "../../agents/codeGenerationAgent";
 import { OpenSCADService } from "../../services/openscadService";
 import { FileStorageService } from "../../services/fileStorageService";
 import { ConversationService } from "../../services/conversationService";
@@ -33,13 +33,12 @@ export class ModelWorkflow {
 
   constructor(
     protected conversationService: ConversationService,
-    protected openScadAiService: OpenScadAiService,
     protected openscadService: OpenSCADService,
     protected fileStorage: FileStorageService,
     protected aiClient: AiClient
   ) {
     logger.debug("ModelWorkflow initialized");
-    this.codeGenerationAgent = new CodeGenerationAgent(this.openScadAiService);
+    this.codeGenerationAgent = new CodeGenerationAgent(this.aiClient);
     this.retryFeedbackAgent = new RetryFeedbackAgent(this.conversationService);
     this.compilationAgent = new CompilationAgent(this.aiClient);
     this.retryRunner = new RetryRunner();
