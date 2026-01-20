@@ -1,3 +1,8 @@
+/**
+ * ErrorDisplay Component
+ * Displays error messages with dismiss option.
+ */
+
 interface ErrorDisplayProps {
   message: string;
   onDismiss?: () => void;

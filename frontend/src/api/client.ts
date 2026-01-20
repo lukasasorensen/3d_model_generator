@@ -1,202 +1,33 @@
-import axios from "axios";
-import {
-  ModelGenerationRequest,
-  ApiResponse,
-  Conversation,
-  ConversationListItem,
-  Message,
-} from "../types";
+/**
+ * API Client
+ * Re-exports services for backward compatibility.
+ * New code should import from services directly.
+ */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
+export { conversationService as apiClient } from "../services/conversationService";
+export { streamingService } from "../services/streamingService";
+export type { ModelStreamEvent } from "../services/streamingService";
 
-export interface ModelStreamEvent {
-  type:
-  | "generation_start"
-  | "code_delta"
-  | "reasoning_delta"
-  | "tool_call_start"
-  | "tool_call_delta"
-  | "tool_call_end"
-  | "code_complete"
-  | "compiling"
-  | "outputting"
-  | "preview_ready"
-  | "validating"
-  | "validation_failed"
-  | "completed"
-  | "generation_error"
-  | "error"
-  | "conversation_created";
-  message?: string;
-  chunk?: string;
-  code?: string;
-  data?: { conversation: Conversation | null; message: Message };
-  error?: string;
-  conversationId?: string;
-  previewUrl?: string;
-  fileId?: string;
-  reason?: string;
-  // Tool call fields
-  toolCallId?: string;
-  toolName?: string;
-  argumentsDelta?: string;
-  arguments?: string;
-  // Usage stats
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-  };
-}
+// Re-export merged client for convenience
+import { conversationService } from "../services/conversationService";
+import { streamingService, ModelStreamEvent } from "../services/streamingService";
+import { ModelGenerationRequest } from "../types";
 
 /**
- * Parse SSE events from a chunk of data.
- * Handles both named events (event: type\ndata: json) and simple data events (data: json with type inside)
+ * Combined API client for backward compatibility.
+ * Prefer using individual services for new code.
  */
-function parseSSEEvents(
-  chunk: string
-): Array<{ eventType: string; data: any }> {
-  const events: Array<{ eventType: string; data: any }> = [];
-  const lines = chunk.split("\n");
+export const legacyApiClient = {
+  // Conversation methods
+  listConversations: conversationService.listConversations,
+  getConversation: conversationService.getConversation,
+  deleteConversation: conversationService.deleteConversation,
 
-  let currentEventType: string | null = null;
-  let currentData: string | null = null;
-
-  for (const line of lines) {
-    if (line.startsWith("event: ")) {
-      // Named event - store the event type
-      currentEventType = line.slice(7).trim();
-    } else if (line.startsWith("data: ")) {
-      // Data line
-      currentData = line.slice(6);
-
-      try {
-        const parsedData = JSON.parse(currentData);
-
-        // If we have a named event type, use it; otherwise fall back to type in data
-        const eventType = currentEventType || parsedData.type;
-
-        if (eventType) {
-          events.push({
-            eventType,
-            data: parsedData,
-          });
-        }
-      } catch (e) {
-        // JSON parse error - skip this event
-        if (!(e instanceof SyntaxError)) {
-          throw e;
-        }
-      }
-
-      // Reset for next event
-      currentEventType = null;
-      currentData = null;
-    } else if (line === "") {
-      // Empty line marks end of an event - reset state
-      currentEventType = null;
-      currentData = null;
-    }
-  }
-
-  return events;
-}
-
-async function streamRequest(
-  url: string,
-  body: object,
-  onEvent: (event: ModelStreamEvent) => void
-): Promise<void> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  const reader = response.body?.getReader();
-  const decoder = new TextDecoder();
-
-  if (!reader) {
-    throw new Error("No response body");
-  }
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) break;
-
-      const chunk = decoder.decode(value);
-      const events = parseSSEEvents(chunk);
-
-      for (const { eventType, data } of events) {
-        const event: ModelStreamEvent = {
-          type: eventType as ModelStreamEvent["type"],
-          ...data,
-        };
-
-        onEvent(event);
-
-        if (event.type === "error" || event.type === "generation_error") {
-          throw new Error(event.error || "Stream error");
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-export const apiClient = {
-  async generateModelStream(
+  // Streaming methods
+  generateModelStream: (
     request: ModelGenerationRequest,
     onEvent: (event: ModelStreamEvent) => void
-  ): Promise<void> {
-    await streamRequest(`${API_BASE_URL}/models/stream`, request, onEvent);
-  },
-
-  getModelUrl(id: string, format: "stl" | "3mf"): string {
-    return `${API_BASE_URL}/models/${id}/${format}`;
-  },
-
-  // Conversation API methods
-  async listConversations(): Promise<ConversationListItem[]> {
-    const response = await axios.get<ApiResponse<ConversationListItem[]>>(
-      `${API_BASE_URL}/conversations`
-    );
-
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || "Failed to list conversations");
-    }
-
-    return response.data.data;
-  },
-
-  async getConversation(id: string): Promise<Conversation> {
-    const response = await axios.get<ApiResponse<Conversation>>(
-      `${API_BASE_URL}/conversations/${id}`
-    );
-
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || "Failed to get conversation");
-    }
-
-    return response.data.data;
-  },
-
-  async deleteConversation(id: string): Promise<void> {
-    const response = await axios.delete<ApiResponse<void>>(
-      `${API_BASE_URL}/conversations/${id}`
-    );
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || "Failed to delete conversation");
-    }
-  },
+  ) => streamingService.generateModelStream(request, onEvent),
+  
+  getModelUrl: streamingService.getModelUrl,
 };

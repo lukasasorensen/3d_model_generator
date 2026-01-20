@@ -1,4 +1,9 @@
-import { StreamingState } from "../hooks/useConversations";
+/**
+ * StreamingCodeDisplay Component
+ * Displays streaming code generation progress.
+ */
+
+import { StreamingState } from "../../hooks/useStreamingState";
 
 interface StreamingCodeDisplayProps {
   streaming: StreamingState;

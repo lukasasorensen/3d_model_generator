@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { apiClient, ModelStreamEvent } from "../api/client";
+import { apiClient, ModelStreamEvent, streamingService } from "../api/client";
 import { Conversation, ConversationListItem } from "../types";
 
 export interface StreamingState {
@@ -91,7 +91,7 @@ export function useConversations() {
 
       try {
         currentConversationIdRef.current = null;
-        await apiClient.generateModelStream(
+        await streamingService.generateModelStream(
           { prompt, format },
           (event: ModelStreamEvent) => {
             handleStreamEvent(event);
@@ -144,7 +144,7 @@ export function useConversations() {
       });
 
       try {
-        await apiClient.generateModelStream(
+        await streamingService.generateModelStream(
           { prompt, format, conversationId: activeConversation.id },
           (event: ModelStreamEvent) => {
             handleStreamEvent(event);
@@ -372,7 +372,7 @@ export function useConversations() {
       });
       currentConversationIdRef.current = activeConversation.id;
       try {
-        await apiClient.generateModelStream(
+        await streamingService.generateModelStream(
           { conversationId: activeConversation.id, format, action: "finalize" },
           (event: ModelStreamEvent) => {
             handleStreamEvent(event);
@@ -407,7 +407,7 @@ export function useConversations() {
       }));
       currentConversationIdRef.current = activeConversation.id;
       try {
-        await apiClient.generateModelStream(
+        await streamingService.generateModelStream(
           { conversationId: activeConversation.id, format, action: "finalize" },
           (event: ModelStreamEvent) => {
             handleStreamEvent(event);
@@ -442,7 +442,7 @@ export function useConversations() {
       }));
       currentConversationIdRef.current = activeConversation.id;
       try {
-        await apiClient.generateModelStream(
+        await streamingService.generateModelStream(
           { conversationId: activeConversation.id, prompt, action: "validate" },
           (event: ModelStreamEvent) => {
             handleStreamEvent(event);

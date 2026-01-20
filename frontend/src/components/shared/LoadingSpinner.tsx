@@ -1,3 +1,8 @@
+/**
+ * LoadingSpinner Component
+ * Displays a loading spinner with message.
+ */
+
 export function LoadingSpinner() {
   return (
     <div className="flex flex-col items-center justify-center py-12">
