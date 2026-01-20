@@ -287,7 +287,7 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
 
       try {
         await streamingService.generateModelStream(
-          { conversationId: activeConversation.id, prompt, action: "validate" },
+          { conversationId: activeConversation.id, prompt, action: "reject_preview_and_retry" },
           handleStreamEvent
         );
         await refreshConversations();

@@ -1,23 +1,10 @@
 import * as fs from "fs/promises";
-import { OpenSCADService, CompileError } from "../services/openscadService";
 import { logger } from "../infrastructure/logger/logger";
-import { AiClient } from "../clients/aiClient";
+import { AiClient, InputMessage } from "../clients/aiClient";
 
-export { CompileError };
-
-export class VisionCheckError extends Error {
-  constructor(
-    message: string,
-    public previewUrl: string,
-    public compiled: {
-      fileId: string;
-      previewPath: string;
-      scadPath: string;
-    }
-  ) {
-    super(message);
-    this.name = "VisionCheckError";
-  }
+export interface RejectionAnalysis {
+  issues: string[];
+  plan: string;
 }
 
 export class CompilationAgent {
@@ -25,45 +12,61 @@ export class CompilationAgent {
     private aiClient: AiClient
   ) { }
 
-  async validatePreview(
-    prompt: string,
+  /**
+   * Analyzes a rejected preview and creates a plan to fix issues based on conversation history.
+   * Called when the user rejects a generated preview.
+   */
+  async rejectPreviewAndRetry(
+    conversationMessages: InputMessage[],
     previewPath: string,
-    previewUrl: string,
-    compiled: {
-      fileId: string;
-      previewPath: string;
-      scadPath: string;
-    }
-  ): Promise<void> {
+    originalPrompt: string
+  ): Promise<RejectionAnalysis> {
     const imageBuffer = await fs.readFile(previewPath);
     const imageBase64 = imageBuffer.toString("base64");
+
     const output = await this.aiClient.visionCompletion({
       prompt:
-        "You are a strict QA for 3D models. Compare the user prompt to the rendered preview." +
-        ' Reply with JSON only: {"status":"ok"|"update","reason":"..."}.' +
-        ` Prompt: ${prompt}`,
+        "The user has REJECTED this 3D model preview. Your job is to analyze what might be wrong.\n\n" +
+        `The user's original request was: "${originalPrompt}"\n\n` +
+        "Examine the preview image and identify discrepancies or issues compared to what was requested.\n\n" +
+        "Based on the conversation history and the preview image, identify:\n" +
+        "1. What issues you can see in the preview that don't match the user's request\n" +
+        "2. A concrete plan for how to fix the OpenSCAD code to address these issues\n\n" +
+        'Reply with JSON only: {"issues":["issue1","issue2",...],"plan":"detailed plan to fix the code"}',
       imageBase64,
+      messages: conversationMessages,
       modelTier: "medium",
     });
 
-    let verdict: { status?: string; reason?: string } = {};
+    let analysis: RejectionAnalysis = { issues: [], plan: "" };
+
     if (typeof output === "string") {
       try {
-        verdict = JSON.parse(output);
+        const parsed = JSON.parse(output);
+        analysis = {
+          issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+          plan: parsed.plan || "Regenerate the model with closer attention to the original request.",
+        };
       } catch {
-        verdict = { status: "update", reason: output || "Unclear response" };
+        // If JSON parsing fails, treat the entire output as the plan
+        analysis = {
+          issues: ["Unable to parse specific issues"],
+          plan: output || "Regenerate the model with closer attention to the original request.",
+        };
       }
     } else {
-      verdict = output as { status?: string; reason?: string };
+      const parsed = output as { issues?: string[]; plan?: string };
+      analysis = {
+        issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+        plan: parsed.plan || "Regenerate the model with closer attention to the original request.",
+      };
     }
 
-    if (verdict.status === "ok") {
-      return;
-    }
+    logger.info("Rejection analysis completed", {
+      issueCount: analysis.issues.length,
+      planLength: analysis.plan.length,
+    });
 
-    const reason =
-      verdict.reason || "Visual check indicates the model needs updates";
-    logger.warn("Vision QA requested update", { reason });
-    throw new VisionCheckError(reason, previewUrl, compiled);
+    return analysis;
   }
 }

@@ -86,7 +86,7 @@ export class ModelController {
           format
         );
       } else if (action === "reject_preview_and_retry") {
-        await this.modelWorkflow.validateAndRetryStream(
+        await this.modelWorkflow.rejectAndRetryStream(
           res,
           conversationId as string,
           format

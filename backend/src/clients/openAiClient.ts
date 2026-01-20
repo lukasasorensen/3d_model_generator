@@ -185,9 +185,9 @@ export class OpenAiClient extends AiClient {
               type: "done",
               usage: usage
                 ? {
-                    inputTokens: usage.input_tokens,
-                    outputTokens: usage.output_tokens,
-                  }
+                  inputTokens: usage.input_tokens,
+                  outputTokens: usage.output_tokens,
+                }
                 : undefined,
             });
             break;
@@ -228,29 +228,43 @@ export class OpenAiClient extends AiClient {
   async visionCompletion<T = string>({
     prompt,
     imageBase64,
+    messages = [],
     modelTier = "medium",
     structuredOutput,
   }: VisionCompletionParams<T>): Promise<T> {
     logger.debug("Starting vision completion", {
       promptLength: prompt.length,
       imageSize: imageBase64.length,
+      messageCount: messages.length,
+    });
+
+    // Build input array: conversation messages first, then the vision prompt with image
+    const input: ResponseCreateParams["input"] = [];
+
+    // Add conversation history as context
+    for (const msg of messages) {
+      (input as any[]).push({
+        role: msg.role,
+        content: msg.content,
+      });
+    }
+
+    // Add the vision prompt with the image as the final user message
+    (input as any[]).push({
+      role: "user",
+      content: [
+        { type: "input_text", text: prompt },
+        {
+          type: "input_image",
+          image_url: `data:image/png;base64,${imageBase64}`,
+          detail: "auto",
+        },
+      ],
     });
 
     const responseParams: ResponseCreateParams = {
       model: this.getModelForTier(modelTier),
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: prompt },
-            {
-              type: "input_image",
-              image_url: `data:image/png;base64,${imageBase64}`,
-              detail: "auto",
-            },
-          ],
-        },
-      ],
+      input,
     };
 
     if (structuredOutput) {

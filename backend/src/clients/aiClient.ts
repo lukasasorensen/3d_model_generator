@@ -19,6 +19,7 @@ export interface StreamCompletionParams {
 export interface VisionCompletionParams<T = string> {
   prompt: string;
   imageBase64: string;
+  messages?: InputMessage[];
   modelTier?: "tiny" | "small" | "medium" | "large" | "xlarge";
   structuredOutput?: z.ZodType<T, any, any>;
 }

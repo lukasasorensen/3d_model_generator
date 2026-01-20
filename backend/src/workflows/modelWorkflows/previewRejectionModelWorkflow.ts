@@ -19,7 +19,7 @@ export class PreviewRejectionModelWorkflow extends FinalizeModelWorkflow {
     super(conversationService, openScadAiService, openscadService, fileStorage, aiClient);
   }
 
-  async validateAndRetryStream(
+  async rejectAndRetryStream(
     res: Response,
     conversationId: string,
     format: "stl" | "3mf"
@@ -37,10 +37,10 @@ export class PreviewRejectionModelWorkflow extends FinalizeModelWorkflow {
       .find((msg) => msg.role === "assistant" && msg.scadCode && msg.previewUrl && !msg.modelUrl);
 
     if (!lastAssistant?.scadCode || !lastAssistant?.previewUrl) {
-      throw new Error("No pending preview available to validate");
+      throw new Error("No pending preview available to reject");
     }
 
-    // Get the original user prompt for validation context
+    // Get the original user prompt for context
     const userMessages = conversation.messages.filter((msg) => msg.role === "user");
     const originalPrompt = userMessages[userMessages.length - 1]?.content || "";
 
@@ -52,51 +52,48 @@ export class PreviewRejectionModelWorkflow extends FinalizeModelWorkflow {
     const previewPath = this.fileStorage.getPreviewPath(previewFileId);
 
     writeSse(res, SSE_EVENTS.validating, {
-      message: "Validating preview with AI...",
+      message: "Analyzing rejected preview...",
       previewUrl: lastAssistant.previewUrl,
     });
 
-    try {
-      // Run AI vision validation
-      await this.compilationAgent.validatePreview(
-        originalPrompt,
-        previewPath,
-        lastAssistant.previewUrl,
-        {
-          fileId: previewFileId,
-          previewPath,
-          scadPath: this.fileStorage.getScadPath(previewFileId),
-        }
-      );
+    // Build conversation messages for the AI to analyze
+    const conversationMessages = conversation.messages.map((msg) => ({
+      role: msg.role as "user" | "assistant" | "system",
+      content: msg.content,
+    }));
 
-      // Validation passed - proceed to finalize
-      logger.info("AI validation passed", { conversationId });
-      await this.finalizeModelStream(res, conversationId, format);
-    } catch (error: any) {
-      // Validation failed - record feedback and regenerate
-      logger.warn("AI validation failed", {
-        conversationId,
-        reason: error.message,
-      });
+    // Get AI analysis of what went wrong and how to fix it
+    const analysis = await this.compilationAgent.rejectPreviewAndRetry(
+      conversationMessages,
+      previewPath,
+      originalPrompt
+    );
 
-      writeSse(res, SSE_EVENTS.validationFailed, {
-        message: "AI validation found issues.",
-        reason: error.message,
-        previewUrl: lastAssistant.previewUrl,
-      });
+    logger.info("Preview rejection analyzed", {
+      conversationId,
+      issues: analysis.issues,
+      plan: analysis.plan,
+    });
 
-      // Record the validation failure
-      await this.retryFeedbackAgent.recordFailure(
-        "validation",
-        conversationId,
-        lastAssistant.scadCode,
-        format,
-        error.message,
-        lastAssistant.previewUrl
-      );
+    writeSse(res, SSE_EVENTS.validationFailed, {
+      message: "User rejected preview - regenerating with improvements.",
+      reason: analysis.plan,
+      issues: analysis.issues,
+      previewUrl: lastAssistant.previewUrl,
+    });
 
-      // Regenerate code with feedback
-      await this.generateAndCompileWithRetry(res, conversationId, originalPrompt, format, false);
-    }
+    // Record the rejection with the AI's analysis as feedback
+    const feedbackMessage = `User rejected the preview. Issues identified: ${analysis.issues.join("; ")}. Fix plan: ${analysis.plan}`;
+    await this.retryFeedbackAgent.recordFailure(
+      "validation",
+      conversationId,
+      lastAssistant.scadCode,
+      format,
+      feedbackMessage,
+      lastAssistant.previewUrl
+    );
+
+    // Regenerate code with the feedback incorporated
+    await this.generateAndCompileWithRetry(res, conversationId, originalPrompt, format, false);
   }
 }
