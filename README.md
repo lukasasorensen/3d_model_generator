@@ -121,8 +121,19 @@ openscad --version
    Create a `.env` file in the `frontend` directory (optional - defaults work for local dev):
 
    ```env
-   VITE_API_BASE_URL=http://localhost:3013/api
+   # Frontend Development Server
+   VITE_PORT=5173
+
+   # Backend API
+   VITE_API_PROXY_TARGET=http://localhost:3001
+   VITE_API_BASE_URL=http://localhost:3001/api
    ```
+
+   | Variable                | Required | Description                                      |
+   | ----------------------- | -------- | ------------------------------------------------ |
+   | `VITE_PORT`             | No       | Frontend dev server port (defaults to `5173`)    |
+   | `VITE_API_PROXY_TARGET` | No       | Backend URL for Vite proxy (defaults to `3001`)  |
+   | `VITE_API_BASE_URL`     | No       | Backend API URL for direct calls                 |
 
 5. **Initialize the database schema**
 
