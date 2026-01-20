@@ -5,7 +5,7 @@
 
 import { RefObject, useEffect, useRef, useState } from "react";
 import { Conversation } from "../../types";
-import { StreamingCodeDisplay } from "../generation/StreamingCodeDisplay";
+import { StreamingCodeDisplay } from "../generation/StreamingCodeDisplay.tsx";
 import { MessageItem } from "./MessageItem";
 import { StreamingState } from "../../hooks/useStreamingState";
 

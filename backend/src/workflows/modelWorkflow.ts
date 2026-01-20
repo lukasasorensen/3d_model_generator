@@ -26,11 +26,7 @@ export class ModelWorkflow {
     logger.debug("ModelWorkflow initialized");
     this.codeGenerationAgent = new CodeGenerationAgent(this.openScadAiService);
     this.retryFeedbackAgent = new RetryFeedbackAgent(this.conversationService);
-    this.compilationAgent = new CompilationAgent(
-      this.openscadService,
-      this.fileStorage,
-      this.aiClient
-    );
+    this.compilationAgent = new CompilationAgent(this.aiClient);
     this.generationRetryRunner = new GenerationRetryRunner(
       this.conversationService,
       this.codeGenerationAgent,
@@ -195,7 +191,7 @@ export class ModelWorkflow {
       message: "Generating final model...",
     });
 
-    const output = await this.compilationAgent.generateOutput(
+    const output = await this.openscadService.generateOutput(
       scadPath,
       fileId,
       format

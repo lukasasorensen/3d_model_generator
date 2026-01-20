@@ -81,10 +81,8 @@ export class GenerationRetryRunner {
       callbacks.onCompiling();
 
       try {
-        const result = await this.compilationAgent.previewModel({
+        const result = await this.openscadService.previewModel({
           scadCode,
-          prompt,
-          validate: false,
         });
 
         // Preview compiled successfully - notify and return result for user approval

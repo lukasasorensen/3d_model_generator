@@ -85,13 +85,14 @@ export function createApp() {
   logger.debug("Creating services");
   const openAiClient = new OpenAiClient(config.openai.apiKey);
   const openScadAiService = new OpenScadAiService(openAiClient);
-  const openscadService = new OpenSCADService(
-    path.join(__dirname, "../generated")
-  );
   const fileStorage = new FileStorageService(
     path.join(__dirname, "../generated/scad"),
     path.join(__dirname, "../generated/stl"),
     path.join(__dirname, "../generated/3mf")
+  );
+  const openscadService = new OpenSCADService(
+    path.join(__dirname, "../generated"),
+    fileStorage
   );
   const conversationService = new ConversationService(prisma);
   logger.debug("Services created successfully");
