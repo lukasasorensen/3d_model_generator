@@ -84,7 +84,7 @@ export class ModelWorkflow {
       conversationId: conversation.id,
     });
 
-    await this.generateAndCompile(res, conversation.id, prompt, format, true);
+    await this.generateAndCompileWithRetry(res, conversation.id, prompt, format, true);
   }
 
   private async generateWithConversation(
@@ -102,10 +102,10 @@ export class ModelWorkflow {
     await this.conversationService.addUserMessage(conversationId, prompt);
     logger.debug("User message added", { conversationId });
 
-    await this.generateAndCompile(res, conversationId, prompt, format, false);
+    await this.generateAndCompileWithRetry(res, conversationId, prompt, format, false);
   }
 
-  private async generateAndCompile(
+  private async generateAndCompileWithRetry(
     res: Response,
     conversationId: string,
     prompt: string,
@@ -116,77 +116,8 @@ export class ModelWorkflow {
 
     const result = await this.retryRunner.run<PreviewResult, GenerationFailure>(
       async (context) => {
-        // Notify attempt start
         this.handleAttemptStart(res, context.attempt, context.maxAttempts, context.lastFailure);
-
-        // Get conversation messages for AI context
-        const messages = await this.conversationService.getConversationMessages(conversationId);
-        logger.debug("Retrieved conversation messages for AI context", {
-          conversationId,
-          messageCount: messages.length,
-        });
-
-        // Generate code
-        let chunkCount = 0;
-        const scadCode = await this.codeGenerationAgent.generateCode(
-          messages,
-          (event: OpenScadStreamEvent) => {
-            if (event.type === "code_delta") {
-              chunkCount++;
-            }
-            writeAiStreamEvent(res, event);
-          }
-        );
-
-        logger.info("Code generation completed", {
-          conversationId,
-          codeLength: scadCode.length,
-          chunkCount,
-          attempt: context.attempt,
-        });
-
-        // Compile preview
-        writeSse(res, SSE_EVENTS.compiling, {
-          message: "Rendering preview...",
-        });
-
-        try {
-          const previewResult = await this.openscadService.previewModel({ scadCode });
-
-          // Preview compiled successfully
-          writeSse(res, SSE_EVENTS.previewReady, {
-            message: "Preview ready - awaiting approval",
-            previewUrl: previewResult.previewUrl,
-            fileId: previewResult.fileId,
-          });
-
-          return {
-            scadCode,
-            fileId: previewResult.fileId,
-            previewUrl: previewResult.previewUrl,
-            scadPath: previewResult.scadPath,
-            previewPath: previewResult.previewPath,
-          };
-        } catch (error: any) {
-          const rawMessage = error?.message || "OpenSCAD compilation error";
-          const parsed = this.openscadService.parseError(rawMessage);
-          logger.warn("OpenSCAD compilation failed", {
-            conversationId,
-            attempt: context.attempt,
-            error: rawMessage,
-          });
-
-          await this.retryFeedbackAgent.recordFailure(
-            "compilation",
-            conversationId,
-            scadCode,
-            format,
-            parsed.message
-          );
-
-          const failure: GenerationFailure = { type: "compilation", message: parsed.message };
-          throw failure;
-        }
+        return this.generateAndCompile(res, conversationId, format);
       },
       { maxAttempts }
     );
@@ -206,6 +137,79 @@ export class ModelWorkflow {
       conversationId,
       previewUrl: result.previewUrl,
     });
+  }
+
+  private async generateAndCompile(
+    res: Response,
+    conversationId: string,
+    format: "stl" | "3mf",
+  ): Promise<PreviewResult> {
+    // Get conversation messages for AI context
+    const messages = await this.conversationService.getConversationMessages(conversationId);
+    logger.debug("Retrieved conversation messages for AI context", {
+      conversationId,
+      messageCount: messages.length,
+    });
+
+    // Generate code
+    let chunkCount = 0;
+    const scadCode = await this.codeGenerationAgent.generateCode(
+      messages,
+      (event: OpenScadStreamEvent) => {
+        if (event.type === "code_delta") {
+          chunkCount++;
+        }
+        writeAiStreamEvent(res, event);
+      }
+    );
+
+    logger.info("Code generation completed", {
+      conversationId,
+      codeLength: scadCode.length,
+      chunkCount,
+    });
+
+    // Compile preview
+    writeSse(res, SSE_EVENTS.compiling, {
+      message: "Rendering preview...",
+    });
+
+    try {
+      const previewResult = await this.openscadService.previewModel({ scadCode });
+
+      // Preview compiled successfully
+      writeSse(res, SSE_EVENTS.previewReady, {
+        message: "Preview ready - awaiting approval",
+        previewUrl: previewResult.previewUrl,
+        fileId: previewResult.fileId,
+      });
+
+      return {
+        scadCode,
+        fileId: previewResult.fileId,
+        previewUrl: previewResult.previewUrl,
+        scadPath: previewResult.scadPath,
+        previewPath: previewResult.previewPath,
+      };
+    } catch (error: any) {
+      const rawMessage = error?.message || "OpenSCAD compilation error";
+      const parsed = this.openscadService.parseError(rawMessage);
+      logger.warn("OpenSCAD compilation failed", {
+        conversationId,
+        error: rawMessage,
+      });
+
+      await this.retryFeedbackAgent.recordFailure(
+        "compilation",
+        conversationId,
+        scadCode,
+        format,
+        parsed.message
+      );
+
+      const failure: GenerationFailure = { type: "compilation", message: parsed.message };
+      throw failure;
+    }
   }
 
   private handleAttemptStart(
@@ -364,7 +368,7 @@ export class ModelWorkflow {
       );
 
       // Regenerate code with feedback
-      await this.generateAndCompile(res, conversationId, originalPrompt, format, false);
+      await this.generateAndCompileWithRetry(res, conversationId, originalPrompt, format, false);
     }
   }
 
