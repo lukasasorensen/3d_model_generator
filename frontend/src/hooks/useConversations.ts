@@ -4,16 +4,18 @@ import { Conversation, ConversationListItem } from "../types";
 
 export interface StreamingState {
   status:
-    | "idle"
-    | "generating"
-    | "compiling"
-    | "validating"
-    | "completed"
-    | "error";
+  | "idle"
+  | "generating"
+  | "compiling"
+  | "awaiting_approval"
+  | "validating"
+  | "completed"
+  | "error";
   streamingCode: string;
   streamingReasoning: string;
   statusMessage: string;
   previewUrl?: string;
+  fileId?: string;
 }
 
 export function useConversations() {
@@ -255,6 +257,24 @@ export function useConversations() {
         }));
         break;
 
+      case "preview_ready":
+        setStreaming((prev) => ({
+          ...prev,
+          status: "awaiting_approval",
+          statusMessage: event.message || "Preview ready - awaiting approval",
+          previewUrl: event.previewUrl,
+          fileId: event.fileId,
+        }));
+        // Refresh conversation to get the saved preview message
+        if (currentConversationIdRef.current) {
+          void apiClient
+            .getConversation(currentConversationIdRef.current)
+            .then(setActiveConversation)
+            .catch(() => undefined);
+        }
+        setLoading(false);
+        break;
+
       case "validating":
         setStreaming((prev) => ({
           ...prev,
@@ -374,6 +394,76 @@ export function useConversations() {
     [activeConversation, fetchConversations, handleStreamEvent]
   );
 
+  const approvePreview = useCallback(
+    async (format: "stl" | "3mf" = "stl") => {
+      if (!activeConversation) {
+        return;
+      }
+      setLoading(true);
+      setStreaming((prev) => ({
+        ...prev,
+        status: "compiling",
+        statusMessage: "Generating final model...",
+      }));
+      currentConversationIdRef.current = activeConversation.id;
+      try {
+        await apiClient.generateModelStream(
+          { conversationId: activeConversation.id, format, action: "finalize" },
+          (event: ModelStreamEvent) => {
+            handleStreamEvent(event);
+          }
+        );
+        await fetchConversations();
+      } catch (err: any) {
+        const errorMessage = err.message || "Failed to finalize model";
+        setError(errorMessage);
+        setStreaming((prev) => ({
+          ...prev,
+          status: "error",
+          statusMessage: errorMessage,
+        }));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeConversation, fetchConversations, handleStreamEvent]
+  );
+
+  const rejectPreview = useCallback(
+    async (prompt: string) => {
+      if (!activeConversation) {
+        return;
+      }
+      setLoading(true);
+      setStreaming((prev) => ({
+        ...prev,
+        status: "validating",
+        statusMessage: "Analyzing preview with AI...",
+      }));
+      currentConversationIdRef.current = activeConversation.id;
+      try {
+        await apiClient.generateModelStream(
+          { conversationId: activeConversation.id, prompt, action: "validate" },
+          (event: ModelStreamEvent) => {
+            handleStreamEvent(event);
+          }
+        );
+        await fetchConversations();
+      } catch (err: any) {
+        const errorMessage = err.message || "Failed to validate model";
+        setError(errorMessage);
+        setStreaming((prev) => ({
+          ...prev,
+          status: "error",
+          statusMessage: errorMessage,
+        }));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeConversation, fetchConversations, handleStreamEvent]
+  );
+
   return {
     conversations,
     activeConversation,
@@ -391,5 +481,7 @@ export function useConversations() {
     clearValidationPrompt,
     retryValidation,
     finalizeValidation,
+    approvePreview,
+    rejectPreview,
   };
 }

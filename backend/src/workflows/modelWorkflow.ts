@@ -9,10 +9,7 @@ import { CodeGenerationAgent } from "../agents/codeGenerationAgent";
 import { RetryFeedbackAgent } from "../agents/retryFeedbackAgent";
 import { CompilationAgent } from "../agents/compilationAgent";
 import { AiClient } from "../clients/aiClient";
-import {
-  GenerationRetryRunner,
-  ValidationPendingError,
-} from "../runners/generationRetryRunner";
+import { GenerationRetryRunner } from "../runners/generationRetryRunner";
 
 export class ModelWorkflow {
   private codeGenerationAgent: CodeGenerationAgent;
@@ -110,103 +107,65 @@ export class ModelWorkflow {
     format: "stl" | "3mf",
     isNewConversation: boolean
   ): Promise<void> {
-    let result;
-    try {
-      result = await this.generationRetryRunner.run(
-        conversationId,
-        prompt,
-        format,
-        {
-          onAttemptStart: (attempt, maxAttempts, lastFailure) => {
-            if (attempt === 1) {
-              writeSse(res, SSE_EVENTS.generationStart, {
-                message: "Generating OpenSCAD code...",
-              });
-              return;
-            }
-
-            if (lastFailure?.type === "validation") {
-              writeSse(res, SSE_EVENTS.generationStart, {
-                message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
-              });
-              return;
-            }
-
+    const result = await this.generationRetryRunner.run(
+      conversationId,
+      prompt,
+      format,
+      {
+        onAttemptStart: (attempt, maxAttempts, lastFailure) => {
+          if (attempt === 1) {
             writeSse(res, SSE_EVENTS.generationStart, {
-              message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+              message: "Generating OpenSCAD code...",
             });
-          },
-          onCompiling: () => {
-            writeSse(res, SSE_EVENTS.compiling, {
-              message: "Rendering preview...",
+            return;
+          }
+
+          if (lastFailure?.type === "validation") {
+            writeSse(res, SSE_EVENTS.generationStart, {
+              message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
             });
-          },
-          onValidating: (previewUrl) => {
-            writeSse(res, SSE_EVENTS.validating, {
-              message: "Validating preview...",
-              previewUrl,
-            });
-          },
-          onValidationFailed: (reason, previewUrl) => {
-            writeSse(res, SSE_EVENTS.validationFailed, {
-              message: "Preview validation found issues.",
-              reason,
-              previewUrl,
-            });
-          },
-          onOutputting: () => {
-            writeSse(res, SSE_EVENTS.outputting, {
-              message: "Generating final model...",
-            });
-          },
-          onStreamEvent: (event) => {
-            writeAiStreamEvent(res, event);
-          },
-        }
-      );
-    } catch (error: any) {
-      if (error instanceof ValidationPendingError) {
-        return;
+            return;
+          }
+
+          writeSse(res, SSE_EVENTS.generationStart, {
+            message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+          });
+        },
+        onCompiling: () => {
+          writeSse(res, SSE_EVENTS.compiling, {
+            message: "Rendering preview...",
+          });
+        },
+        onPreviewReady: (previewUrl, fileId) => {
+          writeSse(res, SSE_EVENTS.previewReady, {
+            message: "Preview ready - awaiting approval",
+            previewUrl,
+            fileId,
+          });
+        },
+        onStreamEvent: (event) => {
+          writeAiStreamEvent(res, event);
+        },
       }
-      throw error;
+    );
+
+    // Preview is ready - save to conversation for later finalization
+    if (result.status === "preview_ready") {
+      await this.conversationService.addAssistantMessage(
+        conversationId,
+        isNewConversation
+          ? `Generated preview for: ${prompt}`
+          : `Updated preview for: ${prompt}`,
+        result.scadCode,
+        undefined, // No model URL yet
+        format,
+        result.previewUrl
+      );
+      logger.info("Preview ready - awaiting user approval", {
+        conversationId,
+        previewUrl: result.previewUrl,
+      });
     }
-
-    logger.info("3D model compiled successfully", {
-      conversationId,
-      format,
-      outputPath: result.outputPath,
-    });
-
-    const assistantMessage = await this.conversationService.addAssistantMessage(
-      conversationId,
-      isNewConversation
-        ? `Generated model for: ${prompt}`
-        : `Updated model for: ${prompt}`,
-      result.scadCode,
-      result.modelUrl,
-      format,
-      result.previewUrl
-    );
-    logger.debug("Assistant message saved", {
-      conversationId,
-      messageId: assistantMessage.id,
-    });
-
-    const updatedConversation = await this.conversationService.getConversation(
-      conversationId
-    );
-
-    writeSse(res, SSE_EVENTS.completed, {
-      data: {
-        conversation: updatedConversation,
-        message: assistantMessage,
-      },
-    });
-
-    logger.info("Model generation completed successfully", {
-      conversationId,
-      modelUrl: result.modelUrl,
-    });
   }
 
   async finalizeModelStream(
@@ -261,6 +220,87 @@ export class ModelWorkflow {
         message: assistantMessage,
       },
     });
+  }
+
+  async validateAndRetryStream(
+    res: Response,
+    conversationId: string,
+    format: "stl" | "3mf"
+  ): Promise<void> {
+    const conversation = await this.conversationService.getConversation(
+      conversationId
+    );
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+
+    // Find the last assistant message with a preview but no model URL (pending approval)
+    const lastAssistant = [...conversation.messages]
+      .reverse()
+      .find((msg) => msg.role === "assistant" && msg.scadCode && msg.previewUrl && !msg.modelUrl);
+
+    if (!lastAssistant?.scadCode || !lastAssistant?.previewUrl) {
+      throw new Error("No pending preview available to validate");
+    }
+
+    // Get the original user prompt for validation context
+    const userMessages = conversation.messages.filter((msg) => msg.role === "user");
+    const originalPrompt = userMessages[userMessages.length - 1]?.content || "";
+
+    // Get the preview file path
+    const previewFileId = lastAssistant.previewUrl.split("/").pop()?.replace(".png", "");
+    if (!previewFileId) {
+      throw new Error("Could not determine preview file ID");
+    }
+    const previewPath = this.fileStorage.getPreviewPath(previewFileId);
+
+    writeSse(res, SSE_EVENTS.validating, {
+      message: "Validating preview with AI...",
+      previewUrl: lastAssistant.previewUrl,
+    });
+
+    try {
+      // Run AI vision validation
+      await this.compilationAgent.validatePreview(
+        originalPrompt,
+        previewPath,
+        lastAssistant.previewUrl,
+        {
+          fileId: previewFileId,
+          previewPath,
+          scadPath: this.fileStorage.getScadPath(previewFileId),
+        }
+      );
+
+      // Validation passed - proceed to finalize
+      logger.info("AI validation passed", { conversationId });
+      await this.finalizeModelStream(res, conversationId, format);
+    } catch (error: any) {
+      // Validation failed - record feedback and regenerate
+      logger.warn("AI validation failed", {
+        conversationId,
+        reason: error.message,
+      });
+
+      writeSse(res, SSE_EVENTS.validationFailed, {
+        message: "AI validation found issues.",
+        reason: error.message,
+        previewUrl: lastAssistant.previewUrl,
+      });
+
+      // Record the validation failure
+      await this.retryFeedbackAgent.recordFailure(
+        "validation",
+        conversationId,
+        lastAssistant.scadCode,
+        format,
+        error.message,
+        lastAssistant.previewUrl
+      );
+
+      // Regenerate code with feedback
+      await this.generateAndCompile(res, conversationId, originalPrompt, format, false);
+    }
   }
 
   async getModelFile(

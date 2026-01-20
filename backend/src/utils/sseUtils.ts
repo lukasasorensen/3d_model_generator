@@ -13,6 +13,7 @@ export const SSE_EVENTS = {
   generationError: "generation_error",
   compiling: "compiling",
   outputting: "outputting",
+  previewReady: "preview_ready",
   validating: "validating",
   validationFailed: "validation_failed",
   completed: "completed",

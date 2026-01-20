@@ -22,6 +22,8 @@ export default function App() {
     clearError,
     retryValidation,
     finalizeValidation,
+    approvePreview,
+    rejectPreview,
   } = useConversations();
 
   const isStreaming = loading && streaming.status !== "idle";
@@ -69,6 +71,38 @@ export default function App() {
 
             {/* Error Display */}
             {error && <ErrorDisplay message={error} onDismiss={clearError} />}
+
+            {streaming.status === "awaiting_approval" && streaming.previewUrl && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                    Does this model look correct?
+                  </h3>
+                  <p className="text-sm text-blue-600 mb-4">
+                    Review the preview below and let us know if it matches your request.
+                  </p>
+                  <img
+                    src={streaming.previewUrl}
+                    alt="Model preview"
+                    className="mx-auto rounded-lg border border-blue-200 mb-6 max-w-full"
+                  />
+                  <div className="flex justify-center gap-4">
+                    <button
+                      onClick={() => approvePreview()}
+                      className="px-6 py-3 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+                    >
+                      Yes, looks good!
+                    </button>
+                    <button
+                      onClick={() => rejectPreview("")}
+                      className="px-6 py-3 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                    >
+                      No, needs changes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {validationPrompt && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">

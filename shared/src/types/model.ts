@@ -2,7 +2,7 @@ export interface ModelGenerationRequest {
   prompt?: string;
   format?: "stl" | "3mf";
   conversationId?: string;
-  action?: "generate" | "finalize";
+  action?: "generate" | "finalize" | "validate";
 }
 
 export interface ModelGenerationResponse {

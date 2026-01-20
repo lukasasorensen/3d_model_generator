@@ -12,21 +12,22 @@ const API_BASE_URL =
 
 export interface ModelStreamEvent {
   type:
-    | "generation_start"
-    | "code_delta"
-    | "reasoning_delta"
-    | "tool_call_start"
-    | "tool_call_delta"
-    | "tool_call_end"
-    | "code_complete"
-    | "compiling"
-    | "outputting"
-    | "validating"
-    | "validation_failed"
-    | "completed"
-    | "generation_error"
-    | "error"
-    | "conversation_created";
+  | "generation_start"
+  | "code_delta"
+  | "reasoning_delta"
+  | "tool_call_start"
+  | "tool_call_delta"
+  | "tool_call_end"
+  | "code_complete"
+  | "compiling"
+  | "outputting"
+  | "preview_ready"
+  | "validating"
+  | "validation_failed"
+  | "completed"
+  | "generation_error"
+  | "error"
+  | "conversation_created";
   message?: string;
   chunk?: string;
   code?: string;
@@ -34,6 +35,7 @@ export interface ModelStreamEvent {
   error?: string;
   conversationId?: string;
   previewUrl?: string;
+  fileId?: string;
   reason?: string;
   // Tool call fields
   toolCallId?: string;

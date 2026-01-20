@@ -78,6 +78,15 @@ export class FileStorageService {
     return outputPath;
   }
 
+  getScadPath(id: string): string {
+    return path.join(this.scadDir, `${id}.scad`);
+  }
+
+  getPreviewPath(id: string): string {
+    const previewsDir = path.join(path.dirname(this.scadDir), "previews");
+    return path.join(previewsDir, `${id}.png`);
+  }
+
   async fileExists(filePath: string): Promise<boolean> {
     try {
       await fs.access(filePath);

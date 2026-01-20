@@ -1,7 +1,7 @@
 import { OpenScadStreamEvent } from "../services/openScadAiService";
 import { OpenSCADService } from "../services/openscadService";
 import { ConversationService } from "../services/conversationService";
-import { CompilationAgent, VisionCheckError } from "../agents/compilationAgent";
+import { CompilationAgent } from "../agents/compilationAgent";
 import { CodeGenerationAgent } from "../agents/codeGenerationAgent";
 import { RetryFeedbackAgent } from "../agents/retryFeedbackAgent";
 import { config } from "../config/config";
@@ -14,11 +14,20 @@ interface GenerationAttemptCallbacks {
     lastFailure?: { type: "validation" | "compilation"; message: string }
   ) => void;
   onCompiling: () => void;
-  onValidating: (previewUrl: string) => void;
-  onValidationFailed: (reason: string, previewUrl: string) => void;
-  onOutputting: () => void;
+  onPreviewReady: (previewUrl: string, fileId: string) => void;
   onStreamEvent: (event: OpenScadStreamEvent) => void;
 }
+
+export interface PreviewReadyResult {
+  status: "preview_ready";
+  scadCode: string;
+  fileId: string;
+  previewUrl: string;
+  scadPath: string;
+  previewPath: string;
+}
+
+export type GenerationResult = PreviewReadyResult;
 
 export class GenerationRetryRunner {
   constructor(
@@ -27,27 +36,15 @@ export class GenerationRetryRunner {
     private compilationAgent: CompilationAgent,
     private retryFeedbackAgent: RetryFeedbackAgent,
     private openscadService: OpenSCADService
-  ) {}
+  ) { }
 
   async run(
     conversationId: string,
     prompt: string,
     format: "stl" | "3mf",
     callbacks: GenerationAttemptCallbacks
-  ): Promise<{
-    scadCode: string;
-    modelUrl: string;
-    outputPath: string;
-    fileId: string;
-    previewUrl: string;
-  }> {
+  ): Promise<GenerationResult> {
     const maxAttempts = Math.max(1, config.openscad.maxCompileRetries);
-    let lastCompiled: {
-      scadCode: string;
-      fileId: string;
-      previewUrl: string;
-      scadPath: string;
-    } | null = null;
     let lastFailure:
       | { type: "validation" | "compilation"; message: string }
       | undefined;
@@ -87,48 +84,21 @@ export class GenerationRetryRunner {
         const result = await this.compilationAgent.previewModel({
           scadCode,
           prompt,
-          validate: true,
-          onValidationStart: callbacks.onValidating,
+          validate: false,
         });
-        lastCompiled = {
+
+        // Preview compiled successfully - notify and return result for user approval
+        callbacks.onPreviewReady(result.previewUrl, result.fileId);
+
+        return {
+          status: "preview_ready",
           scadCode,
           fileId: result.fileId,
           previewUrl: result.previewUrl,
           scadPath: result.scadPath,
+          previewPath: result.previewPath,
         };
-        break;
       } catch (error: any) {
-        if (error instanceof VisionCheckError) {
-          logger.warn("Visual QA requested update", {
-            conversationId,
-            attempt,
-            reason: error.message,
-          });
-
-          lastCompiled = {
-            scadCode,
-            fileId: error.compiled.fileId,
-            previewUrl: error.previewUrl,
-            scadPath: error.compiled.scadPath,
-          };
-
-          await this.retryFeedbackAgent.recordFailure(
-            "validation",
-            conversationId,
-            scadCode,
-            format,
-            error.message,
-            error.previewUrl
-          );
-          lastFailure = { type: "validation", message: error.message };
-          callbacks.onValidationFailed(error.message, error.previewUrl);
-          throw new ValidationPendingError(
-            error.message,
-            error.previewUrl,
-            error.compiled
-          );
-        }
-
         const rawMessage = error?.message || "OpenSCAD compilation error";
         const parsed = this.openscadService.parseError(rawMessage);
         logger.warn("OpenSCAD compilation failed", {
@@ -147,9 +117,6 @@ export class GenerationRetryRunner {
         lastFailure = { type: "compilation", message: parsed.message };
 
         if (attempt === maxAttempts) {
-          if (lastCompiled) {
-            break;
-          }
           throw new Error(
             `Failed to generate model after ${maxAttempts} attempts: ${parsed.message}`
           );
@@ -157,39 +124,6 @@ export class GenerationRetryRunner {
       }
     }
 
-    if (!lastCompiled) {
-      throw new Error("Model generation failed unexpectedly");
-    }
-
-    callbacks.onOutputting();
-
-    const output = await this.compilationAgent.generateOutput(
-      lastCompiled.scadPath,
-      lastCompiled.fileId,
-      format
-    );
-
-    return {
-      scadCode: lastCompiled.scadCode,
-      modelUrl: output.modelUrl,
-      outputPath: output.outputPath,
-      fileId: lastCompiled.fileId,
-      previewUrl: lastCompiled.previewUrl,
-    };
-  }
-}
-
-export class ValidationPendingError extends Error {
-  constructor(
-    message: string,
-    public previewUrl: string,
-    public compiled: {
-      fileId: string;
-      previewPath: string;
-      scadPath: string;
-    }
-  ) {
-    super(message);
-    this.name = "ValidationPendingError";
+    throw new Error("Model generation failed unexpectedly");
   }
 }

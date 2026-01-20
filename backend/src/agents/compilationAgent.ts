@@ -36,7 +36,7 @@ export class CompilationAgent {
     private openscadService: OpenSCADService,
     private fileStorage: FileStorageService,
     private aiClient: AiClient
-  ) {}
+  ) { }
 
   async previewModel({
     scadCode,
@@ -136,7 +136,7 @@ export class CompilationAgent {
     }
   }
 
-  private async validatePreview(
+  async validatePreview(
     prompt: string,
     previewPath: string,
     previewUrl: string,

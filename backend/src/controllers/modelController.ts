@@ -16,7 +16,7 @@ export class ModelController {
       conversationId,
       action = "generate",
     } = req.body as ModelGenerationRequest;
-    if (action !== "finalize") {
+    if (action !== "finalize" && action !== "validate") {
       if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
         logger.warn("Invalid prompt provided for model generation");
         res.status(400).json({
@@ -67,10 +67,10 @@ export class ModelController {
         });
         return;
       }
-    } else if (action === "finalize") {
+    } else if (action === "finalize" || action === "validate") {
       res.status(400).json({
         success: false,
-        error: "conversationId is required to finalize a model",
+        error: `conversationId is required to ${action} a model`,
       });
       return;
     }
@@ -81,6 +81,12 @@ export class ModelController {
     try {
       if (action === "finalize") {
         await this.modelWorkflow.finalizeModelStream(
+          res,
+          conversationId as string,
+          format
+        );
+      } else if (action === "validate") {
+        await this.modelWorkflow.validateAndRetryStream(
           res,
           conversationId as string,
           format
