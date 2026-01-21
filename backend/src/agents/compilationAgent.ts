@@ -17,24 +17,17 @@ export class CompilationAgent {
    * Called when the user rejects a generated preview.
    */
   async rejectPreviewAndRetry(
-    conversationMessages: InputMessage[],
     previewPath: string,
-    originalPrompt: string
+    originalPrompt: string,
+    scadCode: string
   ): Promise<RejectionAnalysis> {
     const imageBuffer = await fs.readFile(previewPath);
     const imageBase64 = imageBuffer.toString("base64");
 
     const output = await this.aiClient.visionCompletion({
       prompt:
-        "The user has REJECTED this 3D model preview. Your job is to analyze what might be wrong.\n\n" +
-        `The user's original request was: "${originalPrompt}"\n\n` +
-        "Examine the preview image and identify discrepancies or issues compared to what was requested.\n\n" +
-        "Based on the conversation history and the preview image, identify:\n" +
-        "1. What issues you can see in the preview that don't match the user's request\n" +
-        "2. A concrete plan for how to fix the OpenSCAD code to address these issues\n\n" +
-        'Reply with JSON only: {"issues":["issue1","issue2",...],"plan":"detailed plan to fix the code"}',
+        this.#buildPrompt(originalPrompt, scadCode),
       imageBase64,
-      messages: conversationMessages,
       modelTier: "medium",
     });
 
@@ -68,5 +61,23 @@ export class CompilationAgent {
     });
 
     return analysis;
+  }
+
+  #buildPrompt(originalPrompt: string, scadCode: string): string {
+    return `
+    # Instructions
+    - You are an expert OpenSCAD programmer. 
+    - Provided with the user's original request and the OpenSCAD code that was used to generate the preview image you will analyze the preview image and create a plan to fix the issues based on the provided code and preview image.
+
+    # Context
+    - AI has generated OpenSCAD code to create a 3d model based on the user's request and rendered a preview image of the model for the user to see.
+    - The user has REJECTED this 3D model preview and is asking you to fix the issues based on the provided code and preview image.
+
+    # User Original Request
+    - ${originalPrompt}
+
+    # OpenSCAD Code
+    - ${scadCode}
+    `;
   }
 }

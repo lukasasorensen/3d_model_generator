@@ -147,7 +147,7 @@ export class ModelWorkflow {
     const messages = await this.conversationService.getConversationMessages(conversationId);
     logger.debug("Retrieved conversation messages for AI context", {
       conversationId,
-      messageCount: messages.length,
+      messages,
     });
 
     // Generate code

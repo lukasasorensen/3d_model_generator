@@ -41,6 +41,7 @@ export class PreviewRejectionModelWorkflow extends FinalizeModelWorkflow {
     // Get the original user prompt for context
     const userMessages = conversation.messages.filter((msg) => msg.role === "user");
     const originalPrompt = userMessages[userMessages.length - 1]?.content || "";
+    const mostRecentScadCode = lastAssistant.scadCode;
 
     // Get the preview file path
     const previewFileId = lastAssistant.previewUrl.split("/").pop()?.replace(".png", "");
@@ -54,17 +55,11 @@ export class PreviewRejectionModelWorkflow extends FinalizeModelWorkflow {
       previewUrl: lastAssistant.previewUrl,
     });
 
-    // Build conversation messages for the AI to analyze
-    const conversationMessages = conversation.messages.map((msg) => ({
-      role: msg.role as "user" | "assistant" | "system",
-      content: msg.content,
-    }));
-
     // Get AI analysis of what went wrong and how to fix it
     const analysis = await this.compilationAgent.rejectPreviewAndRetry(
-      conversationMessages,
       previewPath,
-      originalPrompt
+      originalPrompt,
+      mostRecentScadCode
     );
 
     logger.info("Preview rejection analyzed", {

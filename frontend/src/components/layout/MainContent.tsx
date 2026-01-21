@@ -4,12 +4,12 @@
  */
 
 import { RefObject } from "react";
-import { PromptInput } from "../PromptInput.tsx";
-import { ErrorDisplay } from "../shared/ErrorDisplay.tsx";
+import { PromptInput } from "../PromptInput";
+import { ErrorDisplay } from "../shared/ErrorDisplay";
 import { PreviewApprovalCard } from "../generation/PreviewApprovalCard";
 import { ValidationPromptCard } from "../generation/ValidationPromptCard";
 import { EmptyState } from "./EmptyState";
-import { ConversationView } from "../conversation/ConversationView.tsx";
+import { ConversationView } from "../conversation/ConversationView";
 import { useConversationContext } from "../../contexts/ConversationContext";
 import { useGenerationContext } from "../../contexts/GenerationContext";
 
@@ -69,6 +69,15 @@ export function MainContent({ scrollContainerRef }: MainContentProps) {
         {/* Error Display */}
         {error && <ErrorDisplay message={error} onDismiss={handleClearError} />}
 
+        {/* Conversation View */}
+        {activeConversation && (
+          <ConversationView
+            conversation={activeConversation}
+            streaming={streaming}
+            scrollContainerRef={scrollContainerRef}
+          />
+        )}
+
         {/* Preview Approval */}
         {streaming.status === "awaiting_approval" && streaming.previewUrl && (
           <PreviewApprovalCard
@@ -85,15 +94,6 @@ export function MainContent({ scrollContainerRef }: MainContentProps) {
             previewUrl={validationPrompt.previewUrl}
             onRetry={() => retryValidation(validationPrompt.reason)}
             onIgnore={() => finalizeValidation()}
-          />
-        )}
-
-        {/* Conversation View */}
-        {activeConversation && (
-          <ConversationView
-            conversation={activeConversation}
-            streaming={streaming}
-            scrollContainerRef={scrollContainerRef}
           />
         )}
 

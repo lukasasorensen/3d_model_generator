@@ -244,17 +244,12 @@ When modifying existing code based on follow-up requests:
 
     const inputMessages: InputMessage[] = [];
 
+    // add openscad code to assistant messages
     for (const msg of messages) {
-      const inputMessage: InputMessage = {
+      inputMessages.push({
         role: msg.role,
-        content: msg.content,
-      };
-
-      if (msg.role === "assistant" && msg.scadCode) {
-        inputMessage.content = inputMessage.content + msg.scadCode;
-      }
-
-      inputMessages.push(inputMessage);
+        content: msg.content + (msg.role === "assistant" ? `\n\n${msg.scadCode}` : ""),
+      });
     }
 
     logger.debug("Input messages built", {
