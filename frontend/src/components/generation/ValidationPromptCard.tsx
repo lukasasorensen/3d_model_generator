@@ -10,19 +10,12 @@ interface ValidationPromptCardProps {
   onIgnore: () => void;
 }
 
-export function ValidationPromptCard({
-  reason,
-  previewUrl,
-  onRetry,
-  onIgnore,
-}: ValidationPromptCardProps) {
+export function ValidationPromptCard({ reason, previewUrl, onRetry, onIgnore }: ValidationPromptCardProps) {
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold text-amber-800">
-            AI validation found issues with the model
-          </h3>
+          <h3 className="text-sm font-semibold text-amber-800">AI validation found issues with the model</h3>
           <p className="text-sm text-amber-700 mt-1">{reason}</p>
           {previewUrl && (
             <img

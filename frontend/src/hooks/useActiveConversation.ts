@@ -3,9 +3,9 @@
  * Manages the currently active/selected conversation.
  */
 
-import { useState, useCallback } from "react";
-import { conversationService } from "../services/conversationService";
-import { Conversation } from "../types";
+import { useState, useCallback } from 'react';
+import { conversationService } from '../services/conversationService';
+import { Conversation } from '../types';
 
 export function useActiveConversation() {
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -19,7 +19,7 @@ export function useActiveConversation() {
       const conversation = await conversationService.getConversation(id);
       setActiveConversation(conversation);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to load conversation";
+      const message = err instanceof Error ? err.message : 'Failed to load conversation';
       setError(message);
     } finally {
       setLoading(false);
@@ -51,6 +51,6 @@ export function useActiveConversation() {
     refreshActiveConversation,
     setActiveConversation,
     startNewConversation,
-    clearError,
+    clearError
   };
 }

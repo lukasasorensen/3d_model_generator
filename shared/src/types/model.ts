@@ -1,8 +1,8 @@
 export interface ModelGenerationRequest {
   prompt?: string;
-  format?: "stl" | "3mf";
+  format?: 'stl' | '3mf';
   conversationId?: string;
-  action?: "generate" | "finalize" | "reject_preview_and_retry";
+  action?: 'generate' | 'finalize' | 'reject_preview_and_retry';
 }
 
 export interface ModelGenerationResponse {
@@ -10,9 +10,9 @@ export interface ModelGenerationResponse {
   prompt: string;
   scadCode: string;
   modelUrl: string;
-  format: "stl" | "3mf";
+  format: 'stl' | '3mf';
   generatedAt: string;
-  status: "pending" | "generating" | "completed" | "failed";
+  status: 'pending' | 'generating' | 'completed' | 'failed';
   error?: string;
 }
 
@@ -26,12 +26,12 @@ export interface OpenSCADError {
 export interface Message {
   id: string;
   conversationId: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   scadCode?: string;
   modelUrl?: string;
   previewUrl?: string;
-  format?: "stl" | "3mf";
+  format?: 'stl' | '3mf';
   createdAt: string;
 }
 

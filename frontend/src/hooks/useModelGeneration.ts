@@ -3,13 +3,13 @@
  * Coordinates model generation, approval, validation, and finalization workflows.
  */
 
-import { useCallback, useRef } from "react";
-import { streamingService, ModelStreamEvent } from "../services/streamingService";
-import { conversationService } from "../services/conversationService";
-import { Conversation } from "../types";
-import { StreamingState, ValidationPrompt } from "./useStreamingState";
+import { useCallback, useRef } from 'react';
+import { streamingService, ModelStreamEvent } from '../services/streamingService';
+import { conversationService } from '../services/conversationService';
+import { Conversation } from '../types';
+import { StreamingState, ValidationPrompt } from './useStreamingState';
 
-export type OutputFormat = "stl" | "3mf";
+export type OutputFormat = 'stl' | '3mf';
 
 interface UseModelGenerationOptions {
   // State updaters from useStreamingState
@@ -35,7 +35,7 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
     clearValidationPrompt,
     activeConversation,
     setActiveConversation,
-    refreshConversations,
+    refreshConversations
   } = options;
 
   const currentConversationIdRef = useRef<string | null>(null);
@@ -44,7 +44,7 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
   const handleStreamEvent = useCallback(
     (event: ModelStreamEvent) => {
       switch (event.type) {
-        case "conversation_created":
+        case 'conversation_created':
           if (event.conversationId) {
             currentConversationIdRef.current = event.conversationId;
           }
@@ -56,11 +56,10 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
           }
           break;
 
-        case "generation_start":
+        case 'generation_start':
           if (currentConversationIdRef.current) {
             const shouldRefresh =
-              !activeConversation ||
-              (event.message || "").toLowerCase().includes("retrying");
+              !activeConversation || (event.message || '').toLowerCase().includes('retrying');
             if (shouldRefresh) {
               void conversationService
                 .getConversation(currentConversationIdRef.current)
@@ -69,55 +68,55 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
             }
           }
           updateStreaming({
-            status: "generating",
-            streamingCode: "",
-            streamingReasoning: "",
-            statusMessage: event.message || "Starting...",
-            previewUrl: undefined,
+            status: 'generating',
+            streamingCode: '',
+            streamingReasoning: '',
+            statusMessage: event.message || 'Starting...',
+            previewUrl: undefined
           });
           break;
 
-        case "code_delta":
-          appendCode(event.chunk || "");
+        case 'code_delta':
+          appendCode(event.chunk || '');
           break;
 
-        case "reasoning_delta":
-          appendReasoning(event.chunk || "");
+        case 'reasoning_delta':
+          appendReasoning(event.chunk || '');
           break;
 
-        case "tool_call_start":
-          console.log("Tool call started:", event.toolName);
+        case 'tool_call_start':
+          console.log('Tool call started:', event.toolName);
           break;
 
-        case "tool_call_delta":
+        case 'tool_call_delta':
           // Could be used to show tool call arguments streaming
           break;
 
-        case "tool_call_end":
-          console.log("Tool call ended:", event.toolCallId);
+        case 'tool_call_end':
+          console.log('Tool call ended:', event.toolCallId);
           break;
 
-        case "code_complete":
+        case 'code_complete':
           updateStreaming({
-            streamingCode: event.code || "",
-            statusMessage: "Code generation complete",
+            streamingCode: event.code || '',
+            statusMessage: 'Code generation complete'
           });
           break;
 
-        case "compiling":
+        case 'compiling':
           updateStreaming({
-            status: "compiling",
-            statusMessage: event.message || "Compiling...",
-            previewUrl: undefined,
+            status: 'compiling',
+            statusMessage: event.message || 'Compiling...',
+            previewUrl: undefined
           });
           break;
 
-        case "preview_ready":
+        case 'preview_ready':
           updateStreaming({
-            status: "awaiting_approval",
-            statusMessage: event.message || "Preview ready - awaiting approval",
+            status: 'awaiting_approval',
+            statusMessage: event.message || 'Preview ready - awaiting approval',
             previewUrl: event.previewUrl,
-            fileId: event.fileId,
+            fileId: event.fileId
           });
           // Refresh conversation to get the saved preview message
           if (currentConversationIdRef.current) {
@@ -129,50 +128,50 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
           loadingRef.current = false;
           break;
 
-        case "validating":
+        case 'validating':
           updateStreaming({
-            status: "validating",
-            statusMessage: event.message || "Validating...",
-            previewUrl: event.previewUrl,
+            status: 'validating',
+            statusMessage: event.message || 'Validating...',
+            previewUrl: event.previewUrl
           });
           break;
 
-        case "validation_failed":
+        case 'validation_failed':
           setValidation({
-            reason: event.reason || "Preview validation found issues.",
-            previewUrl: event.previewUrl,
+            reason: event.reason || 'Preview validation found issues.',
+            previewUrl: event.previewUrl
           });
           updateStreaming({
-            status: "validating",
-            statusMessage: event.message || "Preview validation found issues.",
-            previewUrl: event.previewUrl,
+            status: 'validating',
+            statusMessage: event.message || 'Preview validation found issues.',
+            previewUrl: event.previewUrl
           });
           break;
 
-        case "outputting":
+        case 'outputting':
           updateStreaming({
-            status: "compiling",
-            statusMessage: event.message || "Generating final model...",
+            status: 'compiling',
+            statusMessage: event.message || 'Generating final model...'
           });
           break;
 
-        case "completed":
+        case 'completed':
           if (event.data) {
             setActiveConversation(event.data.conversation);
             updateStreaming({
-              status: "completed",
-              streamingCode: event.data.message.scadCode || "",
-              streamingReasoning: "",
-              statusMessage: "Complete!",
-              previewUrl: event.data.message.previewUrl,
+              status: 'completed',
+              streamingCode: event.data.message.scadCode || '',
+              streamingReasoning: '',
+              statusMessage: 'Complete!',
+              previewUrl: event.data.message.previewUrl
             });
             clearValidationPrompt();
           }
           break;
 
-        case "error":
-        case "generation_error":
-          throw new Error(event.error || "Stream error");
+        case 'error':
+        case 'generation_error':
+          throw new Error(event.error || 'Stream error');
       }
     },
     [
@@ -182,14 +181,14 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
       clearValidationPrompt,
       setActiveConversation,
       setValidation,
-      updateStreaming,
+      updateStreaming
     ]
   );
 
   const generateModel = useCallback(
     async (
       prompt: string,
-      format: OutputFormat = "stl",
+      format: OutputFormat = 'stl',
       conversationId?: string
     ): Promise<{ error?: string }> => {
       resetStreaming();
@@ -198,25 +197,19 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
       loadingRef.current = true;
 
       try {
-        await streamingService.generateModelStream(
-          { prompt, format, conversationId },
-          handleStreamEvent
-        );
+        await streamingService.generateModelStream({ prompt, format, conversationId }, handleStreamEvent);
         await refreshConversations();
         return {};
       } catch (err: unknown) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to generate model";
+        const errorMessage = err instanceof Error ? err.message : 'Failed to generate model';
         updateStreaming({
-          status: "error",
-          statusMessage: errorMessage,
+          status: 'error',
+          statusMessage: errorMessage
         });
         // Try to load conversation state on error
         if (currentConversationIdRef.current) {
           try {
-            const conversation = await conversationService.getConversation(
-              currentConversationIdRef.current
-            );
+            const conversation = await conversationService.getConversation(currentConversationIdRef.current);
             setActiveConversation(conversation);
           } catch {
             // Ignore load errors on failure paths
@@ -233,36 +226,35 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
       refreshConversations,
       resetStreaming,
       setActiveConversation,
-      updateStreaming,
+      updateStreaming
     ]
   );
 
   const approvePreview = useCallback(
-    async (format: OutputFormat = "stl"): Promise<{ error?: string }> => {
+    async (format: OutputFormat = 'stl'): Promise<{ error?: string }> => {
       if (!activeConversation) {
-        return { error: "No active conversation" };
+        return { error: 'No active conversation' };
       }
 
       updateStreaming({
-        status: "compiling",
-        statusMessage: "Generating final model...",
+        status: 'compiling',
+        statusMessage: 'Generating final model...'
       });
       currentConversationIdRef.current = activeConversation.id;
       loadingRef.current = true;
 
       try {
         await streamingService.generateModelStream(
-          { conversationId: activeConversation.id, format, action: "finalize" },
+          { conversationId: activeConversation.id, format, action: 'finalize' },
           handleStreamEvent
         );
         await refreshConversations();
         return {};
       } catch (err: unknown) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to finalize model";
+        const errorMessage = err instanceof Error ? err.message : 'Failed to finalize model';
         updateStreaming({
-          status: "error",
-          statusMessage: errorMessage,
+          status: 'error',
+          statusMessage: errorMessage
         });
         return { error: errorMessage };
       } finally {
@@ -275,29 +267,28 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
   const rejectPreview = useCallback(
     async (prompt: string): Promise<{ error?: string }> => {
       if (!activeConversation) {
-        return { error: "No active conversation" };
+        return { error: 'No active conversation' };
       }
 
       updateStreaming({
-        status: "validating",
-        statusMessage: "Analyzing preview with AI...",
+        status: 'validating',
+        statusMessage: 'Analyzing preview with AI...'
       });
       currentConversationIdRef.current = activeConversation.id;
       loadingRef.current = true;
 
       try {
         await streamingService.generateModelStream(
-          { conversationId: activeConversation.id, prompt, action: "reject_preview_and_retry" },
+          { conversationId: activeConversation.id, prompt, action: 'reject_preview_and_retry' },
           handleStreamEvent
         );
         await refreshConversations();
         return {};
       } catch (err: unknown) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to validate model";
+        const errorMessage = err instanceof Error ? err.message : 'Failed to validate model';
         updateStreaming({
-          status: "error",
-          statusMessage: errorMessage,
+          status: 'error',
+          statusMessage: errorMessage
         });
         return { error: errorMessage };
       } finally {
@@ -308,7 +299,7 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
   );
 
   const retryValidation = useCallback(
-    async (reason: string, format: OutputFormat = "stl"): Promise<{ error?: string }> => {
+    async (reason: string, format: OutputFormat = 'stl'): Promise<{ error?: string }> => {
       clearValidationPrompt();
       const retryPrompt = `The preview image does not match the request. Issues: ${reason}. Please fix the code and return the complete updated OpenSCAD source.`;
 
@@ -321,47 +312,40 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
   );
 
   const finalizeValidation = useCallback(
-    async (format: OutputFormat = "stl"): Promise<{ error?: string }> => {
+    async (format: OutputFormat = 'stl'): Promise<{ error?: string }> => {
       if (!activeConversation) {
-        return { error: "No active conversation" };
+        return { error: 'No active conversation' };
       }
 
       clearValidationPrompt();
       updateStreaming({
-        status: "compiling",
-        streamingCode: "",
-        streamingReasoning: "",
-        statusMessage: "Generating final model...",
+        status: 'compiling',
+        streamingCode: '',
+        streamingReasoning: '',
+        statusMessage: 'Generating final model...'
       });
       currentConversationIdRef.current = activeConversation.id;
       loadingRef.current = true;
 
       try {
         await streamingService.generateModelStream(
-          { conversationId: activeConversation.id, format, action: "finalize" },
+          { conversationId: activeConversation.id, format, action: 'finalize' },
           handleStreamEvent
         );
         await refreshConversations();
         return {};
       } catch (err: unknown) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to finalize model";
+        const errorMessage = err instanceof Error ? err.message : 'Failed to finalize model';
         updateStreaming({
-          status: "error",
-          statusMessage: errorMessage,
+          status: 'error',
+          statusMessage: errorMessage
         });
         return { error: errorMessage };
       } finally {
         loadingRef.current = false;
       }
     },
-    [
-      activeConversation,
-      clearValidationPrompt,
-      handleStreamEvent,
-      refreshConversations,
-      updateStreaming,
-    ]
+    [activeConversation, clearValidationPrompt, handleStreamEvent, refreshConversations, updateStreaming]
   );
 
   return {
@@ -369,6 +353,6 @@ export function useModelGeneration(options: UseModelGenerationOptions) {
     approvePreview,
     rejectPreview,
     retryValidation,
-    finalizeValidation,
+    finalizeValidation
   };
 }

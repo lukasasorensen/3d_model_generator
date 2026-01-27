@@ -95,45 +95,49 @@ openscad --version
    POSTGRES_PASSWORD=ai_openscad_dev
    POSTGRES_DB=ai_openscad
    POSTGRES_HOST=localhost
-  POSTGRES_PORT=5432
-
-  # Prisma DATABASE_URL (constructed from above variables)
-  DATABASE_URL=postgresql://ai_openscad:ai_openscad_dev@localhost:5432/ai_openscad
-
-  # OpenSCAD
-  OPENSCAD_MAX_RETRIES=2
-  ```
-
-   | Variable            | Required | Description                                     |
-   | ------------------- | -------- | ----------------------------------------------- |
-   | `OPENAI_API_KEY`    | Yes      | Your OpenAI API key                             |
-   | `POSTGRES_USERNAME` | Yes      | PostgreSQL username                             |
-   | `POSTGRES_PASSWORD` | Yes      | PostgreSQL password                             |
-   | `POSTGRES_DB`       | Yes      | PostgreSQL database name                        |
-   | `POSTGRES_HOST`     | Yes      | PostgreSQL host (use `localhost` for local dev) |
-  | `POSTGRES_PORT`     | No       | PostgreSQL port (defaults to `5432`)            |
-  | `DATABASE_URL`      | Yes      | Full connection URL for Prisma CLI commands     |
-  | `PORT`              | No       | Backend server port (defaults to `3001`)        |
-  | `OPENSCAD_MAX_RETRIES` | No    | Compile retry attempts (defaults to `2`)        |
-
-   > **Note**: The `DATABASE_URL` must match the individual `POSTGRES_*` variables. It's required for Prisma CLI commands like migrations.
-
-   Create a `.env` file in the `frontend` directory (optional - defaults work for local dev):
-
-   ```env
-   # Frontend Development Server
-   VITE_PORT=5173
-
-   # Backend API
-   VITE_API_PROXY_TARGET=http://localhost:3001
-   VITE_API_BASE_URL=http://localhost:3001/api
+   POSTGRES_PORT=5432
    ```
 
-   | Variable                | Required | Description                                      |
-   | ----------------------- | -------- | ------------------------------------------------ |
-   | `VITE_PORT`             | No       | Frontend dev server port (defaults to `5173`)    |
-   | `VITE_API_PROXY_TARGET` | No       | Backend URL for Vite proxy (defaults to `3001`)  |
-   | `VITE_API_BASE_URL`     | No       | Backend API URL for direct calls                 |
+# Prisma DATABASE_URL (constructed from above variables)
+
+DATABASE_URL=postgresql://ai_openscad:ai_openscad_dev@localhost:5432/ai_openscad
+
+# OpenSCAD
+
+OPENSCAD_MAX_RETRIES=2
+
+````
+
+ | Variable            | Required | Description                                     |
+ | ------------------- | -------- | ----------------------------------------------- |
+ | `OPENAI_API_KEY`    | Yes      | Your OpenAI API key                             |
+ | `POSTGRES_USERNAME` | Yes      | PostgreSQL username                             |
+ | `POSTGRES_PASSWORD` | Yes      | PostgreSQL password                             |
+ | `POSTGRES_DB`       | Yes      | PostgreSQL database name                        |
+ | `POSTGRES_HOST`     | Yes      | PostgreSQL host (use `localhost` for local dev) |
+| `POSTGRES_PORT`     | No       | PostgreSQL port (defaults to `5432`)            |
+| `DATABASE_URL`      | Yes      | Full connection URL for Prisma CLI commands     |
+| `PORT`              | No       | Backend server port (defaults to `3001`)        |
+| `OPENSCAD_MAX_RETRIES` | No    | Compile retry attempts (defaults to `2`)        |
+
+ > **Note**: The `DATABASE_URL` must match the individual `POSTGRES_*` variables. It's required for Prisma CLI commands like migrations.
+
+ Create a `.env` file in the `frontend` directory (optional - defaults work for local dev):
+
+ ```env
+ # Frontend Development Server
+ VITE_PORT=5173
+
+ # Backend API
+ VITE_API_PROXY_TARGET=http://localhost:3001
+ VITE_API_BASE_URL=http://localhost:3001/api
+````
+
+| Variable                | Required | Description                                     |
+| ----------------------- | -------- | ----------------------------------------------- |
+| `VITE_PORT`             | No       | Frontend dev server port (defaults to `5173`)   |
+| `VITE_API_PROXY_TARGET` | No       | Backend URL for Vite proxy (defaults to `3001`) |
+| `VITE_API_BASE_URL`     | No       | Backend API URL for direct calls                |
 
 5. **Initialize the database schema**
 
@@ -412,7 +416,7 @@ The backend includes OpenTelemetry instrumentation for traces, metrics, and logs
    OTEL_ENABLED=true
    OTEL_SERVICE_NAME=openscad-ai-backend
    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-   
+
    # Optional: Grafana LGTM ports (defaults shown)
    GRAFANA_PORT=3737
    OTLP_GRPC_PORT=4317
@@ -477,16 +481,16 @@ You can use this trace ID to find the full trace in Grafana Tempo and see all re
 
 ### Configuration Reference
 
-| Variable                      | Default                    | Description                          |
-| ----------------------------- | -------------------------- | ------------------------------------ |
-| `OTEL_ENABLED`                | `false`                    | Enable/disable OpenTelemetry        |
-| `OTEL_SERVICE_NAME`           | `openscad-ai-backend`      | Service name in traces/metrics      |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317`    | OTLP collector endpoint             |
-| `OTEL_DEBUG`                  | `false`                    | Enable OTel SDK debug logging       |
-| `GRAFANA_PORT`                | `3737`                     | Grafana UI port                     |
-| `OTLP_GRPC_PORT`              | `4317`                     | OTLP gRPC receiver port             |
-| `OTLP_HTTP_PORT`              | `4318`                     | OTLP HTTP receiver port             |
-| `GRAFANA_ADMIN_PASSWORD`      | `admin`                    | Grafana admin password              |
+| Variable                      | Default                 | Description                    |
+| ----------------------------- | ----------------------- | ------------------------------ |
+| `OTEL_ENABLED`                | `false`                 | Enable/disable OpenTelemetry   |
+| `OTEL_SERVICE_NAME`           | `openscad-ai-backend`   | Service name in traces/metrics |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OTLP collector endpoint        |
+| `OTEL_DEBUG`                  | `false`                 | Enable OTel SDK debug logging  |
+| `GRAFANA_PORT`                | `3737`                  | Grafana UI port                |
+| `OTLP_GRPC_PORT`              | `4317`                  | OTLP gRPC receiver port        |
+| `OTLP_HTTP_PORT`              | `4318`                  | OTLP HTTP receiver port        |
+| `GRAFANA_ADMIN_PASSWORD`      | `admin`                 | Grafana admin password         |
 
 ### Disabling Telemetry
 

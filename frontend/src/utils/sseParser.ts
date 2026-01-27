@@ -14,16 +14,16 @@ export interface ParsedSSEEvent {
  */
 export function parseSSEEvents(chunk: string): ParsedSSEEvent[] {
   const events: ParsedSSEEvent[] = [];
-  const lines = chunk.split("\n");
+  const lines = chunk.split('\n');
 
   let currentEventType: string | null = null;
   let currentData: string | null = null;
 
   for (const line of lines) {
-    if (line.startsWith("event: ")) {
+    if (line.startsWith('event: ')) {
       // Named event - store the event type
       currentEventType = line.slice(7).trim();
-    } else if (line.startsWith("data: ")) {
+    } else if (line.startsWith('data: ')) {
       // Data line
       currentData = line.slice(6);
 
@@ -36,7 +36,7 @@ export function parseSSEEvents(chunk: string): ParsedSSEEvent[] {
         if (eventType) {
           events.push({
             eventType,
-            data: parsedData,
+            data: parsedData
           });
         }
       } catch (e) {
@@ -49,7 +49,7 @@ export function parseSSEEvents(chunk: string): ParsedSSEEvent[] {
       // Reset for next event
       currentEventType = null;
       currentData = null;
-    } else if (line === "") {
+    } else if (line === '') {
       // Empty line marks end of an event - reset state
       currentEventType = null;
       currentData = null;

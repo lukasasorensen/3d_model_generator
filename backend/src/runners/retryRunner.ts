@@ -1,4 +1,4 @@
-import { logger } from "../infrastructure/logger/logger";
+import { logger } from '../infrastructure/logger/logger';
 
 export interface RetryResult<T> {
   success: true;
@@ -52,36 +52,34 @@ export class RetryRunner {
       const context: RetryAttemptContext<TFailure> = {
         attempt,
         maxAttempts,
-        lastFailure,
+        lastFailure
       };
 
       callbacks?.onAttemptStart?.(context);
 
       try {
         const result = await operation(context);
-        logger.debug("Retry operation succeeded", { attempt, maxAttempts });
+        logger.debug('Retry operation succeeded', { attempt, maxAttempts });
         return result;
       } catch (error: any) {
         lastFailure = error;
-        logger.warn("Retry operation failed", {
+        logger.warn('Retry operation failed', {
           attempt,
           maxAttempts,
-          error: error.message,
+          error: error.message
         });
 
         callbacks?.onAttemptFailed?.({
           ...context,
-          lastFailure: error,
+          lastFailure: error
         });
 
         if (attempt === maxAttempts) {
-          throw new Error(
-            `Operation failed after ${maxAttempts} attempts: ${error.message}`
-          );
+          throw new Error(`Operation failed after ${maxAttempts} attempts: ${error.message}`);
         }
       }
     }
 
-    throw new Error("Retry runner exited unexpectedly");
+    throw new Error('Retry runner exited unexpectedly');
   }
 }

@@ -3,22 +3,18 @@
  * Download buttons for model files.
  */
 
-import { downloadAsFile } from "../../utils/downloadUtils";
+import { downloadAsFile } from '../../utils/downloadUtils';
 
 interface DownloadButtonsProps {
   modelUrl: string;
-  format?: "stl" | "3mf";
+  format?: 'stl' | '3mf';
   scadCode?: string;
 }
 
-export function DownloadButtons({
-  modelUrl,
-  format = "stl",
-  scadCode,
-}: DownloadButtonsProps) {
+export function DownloadButtons({ modelUrl, format = 'stl', scadCode }: DownloadButtonsProps) {
   const handleDownloadScad = () => {
     if (scadCode) {
-      downloadAsFile(scadCode, "model.scad", "text/plain");
+      downloadAsFile(scadCode, 'model.scad', 'text/plain');
     }
   };
 

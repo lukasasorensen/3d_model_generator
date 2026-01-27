@@ -1,16 +1,16 @@
-import * as fs from "fs/promises";
-import * as path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { logger } from "../infrastructure/logger/logger";
-import { FileStorageService } from "./fileStorageService";
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { logger } from '../infrastructure/logger/logger';
+import { FileStorageService } from './fileStorageService';
 
 const execAsync = promisify(exec);
 
 export class CompileError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "CompileError";
+    this.name = 'CompileError';
   }
 }
 
@@ -21,7 +21,7 @@ export class OpenSCADService {
   constructor(outputDir: string, fileStorage?: FileStorageService) {
     this.outputDir = outputDir;
     this.fileStorage = fileStorage || null;
-    logger.debug("OpenSCADService initialized", { outputDir });
+    logger.debug('OpenSCADService initialized', { outputDir });
   }
 
   /**
@@ -32,16 +32,16 @@ export class OpenSCADService {
   }
 
   async checkInstallation(): Promise<boolean> {
-    logger.debug("Checking OpenSCAD installation");
+    logger.debug('Checking OpenSCAD installation');
     try {
-      const { stdout } = await execAsync("openscad --version");
-      logger.info("OpenSCAD installation verified", {
-        version: stdout.trim(),
+      const { stdout } = await execAsync('openscad --version');
+      logger.info('OpenSCAD installation verified', {
+        version: stdout.trim()
       });
       return true;
     } catch (error: any) {
-      logger.error("OpenSCAD not found or not accessible", {
-        error: error.message,
+      logger.error('OpenSCAD not found or not accessible', {
+        error: error.message
       });
       return false;
     }
@@ -50,22 +50,17 @@ export class OpenSCADService {
   /**
    * Saves SCAD code and generates a preview image.
    */
-  async previewModel({
-    scadCode,
-  }: {
-    scadCode: string;
-  }): Promise<{
+  async previewModel({ scadCode }: { scadCode: string }): Promise<{
     fileId: string;
     previewPath: string;
     previewUrl: string;
     scadPath: string;
   }> {
     if (!this.fileStorage) {
-      throw new Error("FileStorageService not configured");
+      throw new Error('FileStorageService not configured');
     }
 
-    const { id: fileId, filePath: scadPath } =
-      await this.fileStorage.saveScadFile(scadCode);
+    const { id: fileId, filePath: scadPath } = await this.fileStorage.saveScadFile(scadCode);
 
     try {
       await this.generatePreview(scadPath, fileId);
@@ -73,11 +68,7 @@ export class OpenSCADService {
       throw new CompileError(`Failed to compile model: ${error.message}`);
     }
 
-    const previewPath = path.join(
-      path.dirname(path.dirname(scadPath)),
-      "previews",
-      `${fileId}.png`
-    );
+    const previewPath = path.join(path.dirname(path.dirname(scadPath)), 'previews', `${fileId}.png`);
 
     const previewUrl = `/api/previews/${fileId}.png`;
 
@@ -85,7 +76,7 @@ export class OpenSCADService {
       fileId,
       previewPath,
       previewUrl,
-      scadPath,
+      scadPath
     };
   }
 
@@ -95,15 +86,15 @@ export class OpenSCADService {
   async generateOutput(
     scadPath: string,
     fileId: string,
-    format: "stl" | "3mf"
+    format: 'stl' | '3mf'
   ): Promise<{ outputPath: string; modelUrl: string }> {
     if (!this.fileStorage) {
-      throw new Error("FileStorageService not configured");
+      throw new Error('FileStorageService not configured');
     }
 
     const outputPath = this.fileStorage.getOutputPath(fileId, format);
 
-    if (format === "stl") {
+    if (format === 'stl') {
       await this.generateSTL(scadPath, outputPath);
     } else {
       await this.generate3MF(scadPath, outputPath);
@@ -111,7 +102,7 @@ export class OpenSCADService {
 
     return {
       outputPath,
-      modelUrl: `/api/models/${fileId}/${format}`,
+      modelUrl: `/api/models/${fileId}/${format}`
     };
   }
 
@@ -119,152 +110,141 @@ export class OpenSCADService {
    * Generates a preview PNG image from SCAD file.
    */
   async generatePreview(scadPath: string, fileId: string): Promise<string> {
-    const previewsDir = path.join(
-      path.dirname(path.dirname(scadPath)),
-      "previews"
-    );
+    const previewsDir = path.join(path.dirname(path.dirname(scadPath)), 'previews');
     await fs.mkdir(previewsDir, { recursive: true });
     const previewPath = path.join(previewsDir, `${fileId}.png`);
 
     const command = `openscad -o "${previewPath}" --imgsize=800,600 --viewall --autocenter "${scadPath}"`;
-    logger.debug("Generating OpenSCAD preview", { command, previewPath });
+    logger.debug('Generating OpenSCAD preview', { command, previewPath });
 
     try {
       await execAsync(command, { timeout: 60000 });
       return previewPath;
     } catch (error: any) {
-      logger.error("Failed to generate preview image", {
+      logger.error('Failed to generate preview image', {
         error: error.message,
-        previewPath,
+        previewPath
       });
-      throw new CompileError(
-        `Failed to generate preview image: ${error.message}`
-      );
+      throw new CompileError(`Failed to generate preview image: ${error.message}`);
     }
   }
 
-  async generateSTL(
-    scadFilePath: string,
-    outputFilePath: string
-  ): Promise<void> {
+  async generateSTL(scadFilePath: string, outputFilePath: string): Promise<void> {
     const command = `openscad -o "${outputFilePath}" "${scadFilePath}"`;
-    logger.info("Generating STL file", {
+    logger.info('Generating STL file', {
       scadFilePath,
-      outputFilePath,
+      outputFilePath
     });
-    logger.debug("Executing OpenSCAD command", { command });
+    logger.debug('Executing OpenSCAD command', { command });
 
     const startTime = Date.now();
 
     try {
       const { stdout, stderr } = await execAsync(command, {
-        timeout: 60000,
+        timeout: 60000
       });
 
       const duration = Date.now() - startTime;
 
       if (stdout) {
-        logger.debug("OpenSCAD stdout", { stdout: stdout.trim() });
+        logger.debug('OpenSCAD stdout', { stdout: stdout.trim() });
       }
 
       if (stderr) {
         // OpenSCAD often outputs warnings to stderr that aren't errors
-        if (stderr.includes("ERROR")) {
-          logger.error("OpenSCAD compilation error", {
+        if (stderr.includes('ERROR')) {
+          logger.error('OpenSCAD compilation error', {
             stderr: stderr.trim(),
-            scadFilePath,
+            scadFilePath
           });
           throw new Error(`OpenSCAD compilation error: ${stderr}`);
         }
-        logger.debug("OpenSCAD stderr (non-error)", { stderr: stderr.trim() });
+        logger.debug('OpenSCAD stderr (non-error)', { stderr: stderr.trim() });
       }
 
-      logger.info("STL file generated successfully", {
+      logger.info('STL file generated successfully', {
         scadFilePath,
         outputFilePath,
-        duration: `${duration}ms`,
+        duration: `${duration}ms`
       });
     } catch (error: any) {
       const duration = Date.now() - startTime;
 
       if (error.killed || error.signal) {
-        logger.error("OpenSCAD compilation timed out", {
+        logger.error('OpenSCAD compilation timed out', {
           scadFilePath,
           outputFilePath,
           duration: `${duration}ms`,
-          timeout: "60s",
+          timeout: '60s'
         });
-        throw new Error("OpenSCAD compilation timed out after 60 seconds");
+        throw new Error('OpenSCAD compilation timed out after 60 seconds');
       }
 
-      logger.error("Failed to generate STL", {
+      logger.error('Failed to generate STL', {
         scadFilePath,
         outputFilePath,
         error: error.message,
-        duration: `${duration}ms`,
+        duration: `${duration}ms`
       });
       throw new Error(`Failed to generate STL: ${error.message}`);
     }
   }
 
-  async generate3MF(
-    scadFilePath: string,
-    outputFilePath: string
-  ): Promise<void> {
+  async generate3MF(scadFilePath: string, outputFilePath: string): Promise<void> {
     const command = `openscad -o "${outputFilePath}" "${scadFilePath}"`;
-    logger.info("Generating 3MF file", {
+    logger.info('Generating 3MF file', {
       scadFilePath,
-      outputFilePath,
+      outputFilePath
     });
-    logger.debug("Executing OpenSCAD command", { command });
+    logger.debug('Executing OpenSCAD command', { command });
 
     const startTime = Date.now();
 
     try {
       const { stdout, stderr } = await execAsync(command, {
-        timeout: 60000,
+        timeout: 60000
       });
 
       const duration = Date.now() - startTime;
 
       if (stdout) {
-        logger.debug("OpenSCAD stdout", { stdout: stdout.trim() });
+        logger.debug('OpenSCAD stdout', { stdout: stdout.trim() });
       }
 
       if (stderr) {
-        if (stderr.includes("ERROR")) {
-          logger.error("OpenSCAD compilation error", {
+        if (stderr.includes('ERROR')) {
+          logger.error('OpenSCAD compilation error', {
             stderr: stderr.trim(),
-            scadFilePath,
+            scadFilePath
           });
           throw new Error(`OpenSCAD compilation error: ${stderr}`);
         }
-        logger.debug("OpenSCAD stderr (non-error)", { stderr: stderr.trim() });
+        logger.debug('OpenSCAD stderr (non-error)', { stderr: stderr.trim() });
       }
 
-      logger.info("3MF file generated successfully", {
+      logger.info('3MF file generated successfully', {
         scadFilePath,
         outputFilePath,
-        duration: `${duration}ms`,
+        duration: `${duration}ms`
       });
     } catch (error: any) {
       const duration = Date.now() - startTime;
 
       if (error.killed || error.signal) {
-        logger.error("OpenSCAD compilation timed out", {
+        logger.error('OpenSCAD compilation timed out', {
           scadFilePath,
           outputFilePath,
           duration: `${duration}ms`,
-          timeout: "60s",
+          timeout: '60s'
         });
-        throw new Error("OpenSCAD compilation timed out after 60 seconds");
+        throw new Error('OpenSCAD compilation timed out after 60 seconds');
       }
 
-      logger.error("Failed to generate 3MF", {
+      logger.error('Failed to generate 3MF', {
         scadFilePath,
         outputFilePath,
         error: error.message,
-        duration: `${duration}ms`,
+        duration: `${duration}ms`
       });
       throw new Error(`Failed to generate 3MF: ${error.message}`);
     }
@@ -281,10 +261,10 @@ export class OpenSCADService {
     const parsed = {
       message: stderr,
       line: lineMatch ? parseInt(lineMatch[1], 10) : undefined,
-      column: colMatch ? parseInt(colMatch[1], 10) : undefined,
+      column: colMatch ? parseInt(colMatch[1], 10) : undefined
     };
 
-    logger.debug("Parsed OpenSCAD error", parsed);
+    logger.debug('Parsed OpenSCAD error', parsed);
     return parsed;
   }
 }

@@ -1,26 +1,26 @@
-import { z } from "zod/v3";
+import { z } from 'zod/v3';
 
 /**
  * Represents a message in the conversation.
  * Each AI client implementation converts these to their specific format.
  */
 export interface InputMessage {
-  role: "user" | "assistant" | "system";
+  role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
 export interface StreamCompletionParams {
   systemPrompt: string;
   messages: InputMessage[];
-  modelTier?: "tiny" | "small" | "medium" | "large" | "xlarge";
-  reasoningEffort?: "none" | "low" | "medium" | "high";
+  modelTier?: 'tiny' | 'small' | 'medium' | 'large' | 'xlarge';
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high';
 }
 
 export interface VisionCompletionParams<T = string> {
   prompt: string;
   imageBase64: string;
   messages?: InputMessage[];
-  modelTier?: "tiny" | "small" | "medium" | "large" | "xlarge";
+  modelTier?: 'tiny' | 'small' | 'medium' | 'large' | 'xlarge';
   structuredOutput?: z.ZodType<T, any, any>;
 }
 
@@ -29,13 +29,13 @@ export interface VisionCompletionParams<T = string> {
  * These represent different types of content that can be streamed from the AI.
  */
 export type StreamEventType =
-  | "text_delta"
-  | "reasoning_delta"
-  | "tool_call_start"
-  | "tool_call_delta"
-  | "tool_call_end"
-  | "done"
-  | "error";
+  | 'text_delta'
+  | 'reasoning_delta'
+  | 'tool_call_start'
+  | 'tool_call_delta'
+  | 'tool_call_end'
+  | 'done'
+  | 'error';
 
 /**
  * Base interface for all stream events
@@ -48,7 +48,7 @@ export interface BaseStreamEvent {
  * Text content delta event
  */
 export interface TextDeltaEvent extends BaseStreamEvent {
-  type: "text_delta";
+  type: 'text_delta';
   delta: string;
 }
 
@@ -56,7 +56,7 @@ export interface TextDeltaEvent extends BaseStreamEvent {
  * Reasoning/thinking content delta event
  */
 export interface ReasoningDeltaEvent extends BaseStreamEvent {
-  type: "reasoning_delta";
+  type: 'reasoning_delta';
   delta: string;
 }
 
@@ -64,7 +64,7 @@ export interface ReasoningDeltaEvent extends BaseStreamEvent {
  * Tool call started event
  */
 export interface ToolCallStartEvent extends BaseStreamEvent {
-  type: "tool_call_start";
+  type: 'tool_call_start';
   toolCallId: string;
   toolName: string;
 }
@@ -73,7 +73,7 @@ export interface ToolCallStartEvent extends BaseStreamEvent {
  * Tool call argument delta event
  */
 export interface ToolCallDeltaEvent extends BaseStreamEvent {
-  type: "tool_call_delta";
+  type: 'tool_call_delta';
   toolCallId: string;
   argumentsDelta: string;
 }
@@ -82,7 +82,7 @@ export interface ToolCallDeltaEvent extends BaseStreamEvent {
  * Tool call completed event
  */
 export interface ToolCallEndEvent extends BaseStreamEvent {
-  type: "tool_call_end";
+  type: 'tool_call_end';
   toolCallId: string;
   arguments: string;
 }
@@ -91,7 +91,7 @@ export interface ToolCallEndEvent extends BaseStreamEvent {
  * Stream completed event
  */
 export interface DoneEvent extends BaseStreamEvent {
-  type: "done";
+  type: 'done';
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -102,7 +102,7 @@ export interface DoneEvent extends BaseStreamEvent {
  * Error event
  */
 export interface ErrorEvent extends BaseStreamEvent {
-  type: "error";
+  type: 'error';
   error: string;
   code?: string;
 }
@@ -135,16 +135,11 @@ export abstract class AiClient {
    * @param onEvent - Callback function called for each stream event
    * @returns Promise that resolves when streaming is complete
    */
-  abstract streamCompletion(
-    params: StreamCompletionParams,
-    onEvent: StreamEventHandler
-  ): Promise<void>;
+  abstract streamCompletion(params: StreamCompletionParams, onEvent: StreamEventHandler): Promise<void>;
 
   /**
    * Run a single-shot vision completion and return the raw text output.
    * @param params - The vision completion parameters
    */
-  abstract visionCompletion<T = string>(
-    params: VisionCompletionParams<T>
-  ): Promise<T>;
+  abstract visionCompletion<T = string>(params: VisionCompletionParams<T>): Promise<T>;
 }

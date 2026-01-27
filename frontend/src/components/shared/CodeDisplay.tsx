@@ -3,7 +3,7 @@
  * Displays code with copy functionality.
  */
 
-import { copyToClipboard } from "../../utils/downloadUtils";
+import { copyToClipboard } from '../../utils/downloadUtils';
 
 interface CodeDisplayProps {
   code: string;
@@ -11,11 +11,7 @@ interface CodeDisplayProps {
   title?: string;
 }
 
-export function CodeDisplay({
-  code,
-  collapsible = false,
-  title = "OpenSCAD Code",
-}: CodeDisplayProps) {
+export function CodeDisplay({ code, collapsible = false, title = 'OpenSCAD Code' }: CodeDisplayProps) {
   const handleCopy = async () => {
     await copyToClipboard(code);
   };
@@ -29,9 +25,7 @@ export function CodeDisplay({
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between gap-3 mb-2">
-        <h4 className="text-xs uppercase tracking-wide text-slate-500">
-          {title}
-        </h4>
+        <h4 className="text-xs uppercase tracking-wide text-slate-500">{title}</h4>
         <button
           onClick={handleCopy}
           className="text-xs text-slate-600 hover:text-slate-800 transition-colors"
@@ -41,9 +35,7 @@ export function CodeDisplay({
       </div>
       {collapsible ? (
         <details>
-          <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
-            View code
-          </summary>
+          <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">View code</summary>
           <div className="mt-2">{codeBlock}</div>
         </details>
       ) : (

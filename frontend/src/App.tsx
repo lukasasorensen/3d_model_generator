@@ -3,12 +3,12 @@
  * Main application entry point with providers and layout.
  */
 
-import { useRef } from "react";
-import { ConversationProvider, useConversationContext } from "./contexts/ConversationContext";
-import { GenerationProvider, useGenerationContext } from "./contexts/GenerationContext";
-import { ConversationSidebar } from "./components/conversation/ConversationSidebar";
-import { MainContent } from "./components/layout/MainContent";
-import { PromptInput } from "./components/PromptInput";
+import { useRef } from 'react';
+import { ConversationProvider, useConversationContext } from './contexts/ConversationContext';
+import { GenerationProvider, useGenerationContext } from './contexts/GenerationContext';
+import { ConversationSidebar } from './components/conversation/ConversationSidebar';
+import { MainContent } from './components/layout/MainContent';
+import { PromptInput } from './components/PromptInput';
 
 function AppContent() {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -18,7 +18,7 @@ function AppContent() {
     fetchConversations,
     loadConversation,
     startNewConversation,
-    deleteConversation,
+    deleteConversation
   } = useConversationContext();
 
   const { loading, addMessage } = useGenerationContext();
@@ -47,12 +47,7 @@ function AppContent() {
       {showFollowUpPrompt && (
         <div className="fixed bottom-0 left-72 right-0 z-20 px-6 pb-6">
           <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 p-4">
-            <PromptInput
-              onSubmit={addMessage}
-              loading={loading}
-              isFollowUp
-              compact
-            />
+            <PromptInput onSubmit={addMessage} loading={loading} isFollowUp compact />
           </div>
         </div>
       )}

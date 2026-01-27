@@ -3,10 +3,10 @@
  * Provides model generation state and operations to the component tree.
  */
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { useStreamingState, StreamingState, ValidationPrompt } from "../hooks/useStreamingState";
-import { useModelGeneration, OutputFormat } from "../hooks/useModelGeneration";
-import { useConversationContext } from "./ConversationContext";
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { useStreamingState, StreamingState, ValidationPrompt } from '../hooks/useStreamingState';
+import { useModelGeneration, OutputFormat } from '../hooks/useModelGeneration';
+import { useConversationContext } from './ConversationContext';
 
 interface GenerationContextValue {
   // State
@@ -34,11 +34,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    activeConversation,
-    setActiveConversation,
-    fetchConversations,
-  } = useConversationContext();
+  const { activeConversation, setActiveConversation, fetchConversations } = useConversationContext();
 
   const {
     streaming,
@@ -48,7 +44,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     appendCode,
     appendReasoning,
     setValidation,
-    clearValidationPrompt,
+    clearValidationPrompt
   } = useStreamingState();
 
   const {
@@ -56,7 +52,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     approvePreview: approvePreviewBase,
     rejectPreview: rejectPreviewBase,
     retryValidation: retryValidationBase,
-    finalizeValidation: finalizeValidationBase,
+    finalizeValidation: finalizeValidationBase
   } = useModelGeneration({
     resetStreaming,
     updateStreaming,
@@ -66,21 +62,17 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     clearValidationPrompt,
     activeConversation,
     setActiveConversation,
-    refreshConversations: fetchConversations,
+    refreshConversations: fetchConversations
   });
 
   const addMessage = useCallback(
-    async (prompt: string, format: OutputFormat = "stl") => {
+    async (prompt: string, format: OutputFormat = 'stl') => {
       setLoading(true);
       setError(null);
       resetStreaming();
       clearValidationPrompt();
 
-      const result = await generateModel(
-        prompt,
-        format,
-        activeConversation?.id
-      );
+      const result = await generateModel(prompt, format, activeConversation?.id);
 
       if (result.error) {
         setError(result.error);
@@ -91,7 +83,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
   );
 
   const approvePreview = useCallback(
-    async (format: OutputFormat = "stl") => {
+    async (format: OutputFormat = 'stl') => {
       setLoading(true);
       setError(null);
 
@@ -121,7 +113,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
   );
 
   const retryValidation = useCallback(
-    async (reason: string, format: OutputFormat = "stl") => {
+    async (reason: string, format: OutputFormat = 'stl') => {
       setLoading(true);
       setError(null);
 
@@ -136,7 +128,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
   );
 
   const finalizeValidation = useCallback(
-    async (format: OutputFormat = "stl") => {
+    async (format: OutputFormat = 'stl') => {
       setLoading(true);
       setError(null);
 
@@ -163,22 +155,16 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
     retryValidation,
     finalizeValidation,
     clearError,
-    resetStreaming,
+    resetStreaming
   };
 
-  return (
-    <GenerationContext.Provider value={value}>
-      {children}
-    </GenerationContext.Provider>
-  );
+  return <GenerationContext.Provider value={value}>{children}</GenerationContext.Provider>;
 }
 
 export function useGenerationContext(): GenerationContextValue {
   const context = useContext(GenerationContext);
   if (!context) {
-    throw new Error(
-      "useGenerationContext must be used within a GenerationProvider"
-    );
+    throw new Error('useGenerationContext must be used within a GenerationProvider');
   }
   return context;
 }

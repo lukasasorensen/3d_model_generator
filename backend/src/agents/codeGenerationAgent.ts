@@ -1,59 +1,54 @@
-import {
-  AiClient,
-  InputMessage,
-  StreamEvent,
-  StreamEventHandler,
-} from "../clients/aiClient";
-import { Message } from "../../../shared/src/types/model";
-import { logger } from "../infrastructure/logger/logger";
+import { AiClient, InputMessage, StreamEvent, StreamEventHandler } from '../clients/aiClient';
+import { Message } from '../../../shared/src/types/model';
+import { logger } from '../infrastructure/logger/logger';
 
 /**
  * OpenSCAD-specific stream event types
  * Extends the base AI events with OpenSCAD-specific context
  */
 export type OpenScadStreamEventType =
-  | "code_delta"
-  | "reasoning_delta"
-  | "tool_call_start"
-  | "tool_call_delta"
-  | "tool_call_end"
-  | "done"
-  | "error";
+  | 'code_delta'
+  | 'reasoning_delta'
+  | 'tool_call_start'
+  | 'tool_call_delta'
+  | 'tool_call_end'
+  | 'done'
+  | 'error';
 
 export interface BaseOpenScadEvent {
   type: OpenScadStreamEventType;
 }
 
 export interface CodeDeltaEvent extends BaseOpenScadEvent {
-  type: "code_delta";
+  type: 'code_delta';
   delta: string;
 }
 
 export interface OpenScadReasoningDeltaEvent extends BaseOpenScadEvent {
-  type: "reasoning_delta";
+  type: 'reasoning_delta';
   delta: string;
 }
 
 export interface OpenScadToolCallStartEvent extends BaseOpenScadEvent {
-  type: "tool_call_start";
+  type: 'tool_call_start';
   toolCallId: string;
   toolName: string;
 }
 
 export interface OpenScadToolCallDeltaEvent extends BaseOpenScadEvent {
-  type: "tool_call_delta";
+  type: 'tool_call_delta';
   toolCallId: string;
   argumentsDelta: string;
 }
 
 export interface OpenScadToolCallEndEvent extends BaseOpenScadEvent {
-  type: "tool_call_end";
+  type: 'tool_call_end';
   toolCallId: string;
   arguments: string;
 }
 
 export interface OpenScadDoneEvent extends BaseOpenScadEvent {
-  type: "done";
+  type: 'done';
   totalCode: string;
   usage?: {
     inputTokens: number;
@@ -62,7 +57,7 @@ export interface OpenScadDoneEvent extends BaseOpenScadEvent {
 }
 
 export interface OpenScadErrorEvent extends BaseOpenScadEvent {
-  type: "error";
+  type: 'error';
   error: string;
   code?: string;
 }
@@ -86,7 +81,7 @@ export class CodeGenerationAgent {
   private systemPrompt: string;
 
   constructor(private aiClient: AiClient) {
-    logger.debug("Initializing CodeGenerationAgent");
+    logger.debug('Initializing CodeGenerationAgent');
     this.systemPrompt = `# Instructions: 
 - You are an expert OpenSCAD programmer. Your goal is to generate a 3d model based on the user's prompt. 
 - Use OpenSCAD primitives to generate the model with the least amount of code possible, satisfying the user's request. 
@@ -112,7 +107,7 @@ When modifying existing code based on follow-up requests:
 - Output the complete, updated OpenSCAD code
 - If user provides and error and asks to fix it, look at the previous OpenSCAD code and fix the code to fix the error.`;
 
-    logger.debug("CodeGenerationAgent initialized");
+    logger.debug('CodeGenerationAgent initialized');
   }
 
   /**
@@ -121,92 +116,89 @@ When modifying existing code based on follow-up requests:
    * @param onEvent - Callback function called for each stream event
    * @returns Promise that resolves with the complete generated code
    */
-  async generateCode(
-    messages: Message[],
-    onEvent: OpenScadStreamEventHandler
-  ): Promise<string> {
+  async generateCode(messages: Message[], onEvent: OpenScadStreamEventHandler): Promise<string> {
     const inputMessages = this.buildInputMessages(messages);
-    logger.info("Starting streaming code generation", {
+    logger.info('Starting streaming code generation', {
       messageCount: messages.length,
-      inputMessageCount: inputMessages.length,
+      inputMessageCount: inputMessages.length
     });
 
-    let accumulatedCode = "";
+    let accumulatedCode = '';
     let totalChunks = 0;
 
     await this.aiClient.streamCompletion(
       {
         systemPrompt: this.systemPrompt,
         messages: inputMessages,
-        modelTier: "medium",
-        reasoningEffort: "medium",
+        modelTier: 'medium',
+        reasoningEffort: 'medium'
       },
       (event: StreamEvent) => {
         switch (event.type) {
-          case "text_delta":
+          case 'text_delta':
             accumulatedCode += event.delta;
             totalChunks++;
             onEvent({
-              type: "code_delta",
-              delta: event.delta,
+              type: 'code_delta',
+              delta: event.delta
             });
             break;
 
-          case "reasoning_delta":
+          case 'reasoning_delta':
             onEvent({
-              type: "reasoning_delta",
-              delta: event.delta,
+              type: 'reasoning_delta',
+              delta: event.delta
             });
             break;
 
-          case "tool_call_start":
+          case 'tool_call_start':
             onEvent({
-              type: "tool_call_start",
+              type: 'tool_call_start',
               toolCallId: event.toolCallId,
-              toolName: event.toolName,
+              toolName: event.toolName
             });
             break;
 
-          case "tool_call_delta":
+          case 'tool_call_delta':
             onEvent({
-              type: "tool_call_delta",
+              type: 'tool_call_delta',
               toolCallId: event.toolCallId,
-              argumentsDelta: event.argumentsDelta,
+              argumentsDelta: event.argumentsDelta
             });
             break;
 
-          case "tool_call_end":
+          case 'tool_call_end':
             onEvent({
-              type: "tool_call_end",
+              type: 'tool_call_end',
               toolCallId: event.toolCallId,
-              arguments: event.arguments,
+              arguments: event.arguments
             });
             break;
 
-          case "done":
+          case 'done':
             // Clean the code before sending done event
             const cleanedCode = this.cleanCode(accumulatedCode);
             onEvent({
-              type: "done",
+              type: 'done',
               totalCode: cleanedCode,
-              usage: event.usage,
+              usage: event.usage
             });
             break;
 
-          case "error":
+          case 'error':
             onEvent({
-              type: "error",
+              type: 'error',
               error: event.error,
-              code: event.code,
+              code: event.code
             });
             break;
         }
       }
     );
 
-    logger.info("Streaming code generation completed", {
+    logger.info('Streaming code generation completed', {
       totalChunks,
-      totalLength: accumulatedCode.length,
+      totalLength: accumulatedCode.length
     });
 
     return this.cleanCode(accumulatedCode);
@@ -219,12 +211,12 @@ When modifying existing code based on follow-up requests:
   createMessagesFromPrompt(prompt: string): Message[] {
     return [
       {
-        id: "temp-user-message",
-        conversationId: "temp",
-        role: "user",
+        id: 'temp-user-message',
+        conversationId: 'temp',
+        role: 'user',
         content: prompt,
-        createdAt: new Date().toISOString(),
-      },
+        createdAt: new Date().toISOString()
+      }
     ];
   }
 
@@ -234,12 +226,12 @@ When modifying existing code based on follow-up requests:
    */
   public buildInputMessages(messages: Message[]): InputMessage[] {
     if (messages.length === 0) {
-      logger.error("No messages provided for conversation input");
-      throw new Error("No messages provided");
+      logger.error('No messages provided for conversation input');
+      throw new Error('No messages provided');
     }
 
-    logger.debug("Building input messages from conversation history", {
-      messageCount: messages.length,
+    logger.debug('Building input messages from conversation history', {
+      messageCount: messages.length
     });
 
     const inputMessages: InputMessage[] = [];
@@ -248,12 +240,12 @@ When modifying existing code based on follow-up requests:
     for (const msg of messages) {
       inputMessages.push({
         role: msg.role,
-        content: msg.content + (msg.role === "assistant" ? `\n\n${msg.scadCode}` : ""),
+        content: msg.content + (msg.role === 'assistant' ? `\n\n${msg.scadCode}` : '')
       });
     }
 
-    logger.debug("Input messages built", {
-      inputMessageCount: inputMessages.length,
+    logger.debug('Input messages built', {
+      inputMessageCount: inputMessages.length
     });
 
     return inputMessages;
@@ -262,16 +254,16 @@ When modifying existing code based on follow-up requests:
   cleanCode(code: string): string {
     let cleaned = code.trim();
 
-    if (cleaned.startsWith("```openscad")) {
-      logger.debug("Removing openscad markdown code block markers");
-      cleaned = cleaned.replace(/^```openscad\n/, "");
-    } else if (cleaned.startsWith("```")) {
-      logger.debug("Removing generic markdown code block markers");
-      cleaned = cleaned.replace(/^```\n/, "");
+    if (cleaned.startsWith('```openscad')) {
+      logger.debug('Removing openscad markdown code block markers');
+      cleaned = cleaned.replace(/^```openscad\n/, '');
+    } else if (cleaned.startsWith('```')) {
+      logger.debug('Removing generic markdown code block markers');
+      cleaned = cleaned.replace(/^```\n/, '');
     }
 
-    if (cleaned.endsWith("```")) {
-      cleaned = cleaned.replace(/\n```$/, "");
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.replace(/\n```$/, '');
     }
 
     return cleaned.trim();

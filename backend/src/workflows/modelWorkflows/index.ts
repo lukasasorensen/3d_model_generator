@@ -1,1 +1,1 @@
-export { PreviewRejectionModelWorkflow as ModelWorkflow } from "./previewRejectionModelWorkflow";
+export { PreviewRejectionModelWorkflow as ModelWorkflow } from './previewRejectionModelWorkflow';

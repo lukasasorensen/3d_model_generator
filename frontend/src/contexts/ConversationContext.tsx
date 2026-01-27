@@ -3,10 +3,10 @@
  * Provides conversation state and operations to the component tree.
  */
 
-import { createContext, useContext, useCallback, ReactNode } from "react";
-import { useConversationList } from "../hooks/useConversationList";
-import { useActiveConversation } from "../hooks/useActiveConversation";
-import { Conversation, ConversationListItem } from "../types";
+import { createContext, useContext, useCallback, ReactNode } from 'react';
+import { useConversationList } from '../hooks/useConversationList';
+import { useActiveConversation } from '../hooks/useActiveConversation';
+import { Conversation, ConversationListItem } from '../types';
 
 interface ConversationContextValue {
   // List state
@@ -37,7 +37,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     conversations,
     loading: listLoading,
     fetchConversations,
-    deleteConversation: deleteFromList,
+    deleteConversation: deleteFromList
   } = useConversationList();
 
   const {
@@ -48,7 +48,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     refreshActiveConversation,
     setActiveConversation,
     startNewConversation,
-    clearError,
+    clearError
   } = useActiveConversation();
 
   const handleDeleteConversation = useCallback(
@@ -73,22 +73,16 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     startNewConversation,
     setActiveConversation,
     refreshActiveConversation,
-    clearError,
+    clearError
   };
 
-  return (
-    <ConversationContext.Provider value={value}>
-      {children}
-    </ConversationContext.Provider>
-  );
+  return <ConversationContext.Provider value={value}>{children}</ConversationContext.Provider>;
 }
 
 export function useConversationContext(): ConversationContextValue {
   const context = useContext(ConversationContext);
   if (!context) {
-    throw new Error(
-      "useConversationContext must be used within a ConversationProvider"
-    );
+    throw new Error('useConversationContext must be used within a ConversationProvider');
   }
   return context;
 }

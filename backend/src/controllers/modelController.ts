@@ -1,112 +1,97 @@
-import { Request, Response } from "express";
-import { ModelGenerationRequest } from "../../../shared/src/types/model";
-import { logger } from "../infrastructure/logger/logger";
-import { SSE_EVENTS, setSseHeaders, writeSse } from "../utils/sseUtils";
-import { ModelWorkflow } from "../workflows/modelWorkflows";
+import { Request, Response } from 'express';
+import { ModelGenerationRequest } from '../../../shared/src/types/model';
+import { logger } from '../infrastructure/logger/logger';
+import { SSE_EVENTS, setSseHeaders, writeSse } from '../utils/sseUtils';
+import { ModelWorkflow } from '../workflows/modelWorkflows';
 
 export class ModelController {
   constructor(private modelWorkflow: ModelWorkflow) {
-    logger.debug("ModelController initialized");
+    logger.debug('ModelController initialized');
   }
 
   async generateModelStream(req: Request, res: Response): Promise<void> {
     const {
       prompt,
-      format = "stl",
+      format = 'stl',
       conversationId,
-      action = "generate",
+      action = 'generate'
     } = req.body as ModelGenerationRequest;
-    if (action !== "finalize" && action !== "reject_preview_and_retry") {
-      if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
-        logger.warn("Invalid prompt provided for model generation");
+    if (action !== 'finalize' && action !== 'reject_preview_and_retry') {
+      if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+        logger.warn('Invalid prompt provided for model generation');
         res.status(400).json({
           success: false,
-          error: "Prompt is required and must be a non-empty string",
+          error: 'Prompt is required and must be a non-empty string'
         });
         return;
       }
 
       if (prompt.length > 1000) {
-        logger.warn("Prompt too long for model generation", {
-          promptLength: prompt.length,
+        logger.warn('Prompt too long for model generation', {
+          promptLength: prompt.length
         });
         res.status(400).json({
           success: false,
-          error: "Prompt is too long (maximum 1000 characters)",
+          error: 'Prompt is too long (maximum 1000 characters)'
         });
         return;
       }
     }
 
-    if (format !== "stl" && format !== "3mf") {
-      logger.warn("Invalid format specified for model generation", { format });
+    if (format !== 'stl' && format !== '3mf') {
+      logger.warn('Invalid format specified for model generation', { format });
       res.status(400).json({
         success: false,
-        error: 'Format must be either "stl" or "3mf"',
+        error: 'Format must be either "stl" or "3mf"'
       });
       return;
     }
 
     if (conversationId !== undefined) {
-      if (typeof conversationId !== "string" || conversationId.trim() === "") {
-        logger.warn("Invalid conversationId provided for model generation");
+      if (typeof conversationId !== 'string' || conversationId.trim() === '') {
+        logger.warn('Invalid conversationId provided for model generation');
         res.status(400).json({
           success: false,
-          error: "conversationId must be a non-empty string",
+          error: 'conversationId must be a non-empty string'
         });
         return;
       }
 
-      const conversation = await this.modelWorkflow.getConversation(
-        conversationId
-      );
+      const conversation = await this.modelWorkflow.getConversation(conversationId);
       if (!conversation) {
         res.status(404).json({
           success: false,
-          error: "Conversation not found",
+          error: 'Conversation not found'
         });
         return;
       }
-    } else if (action === "finalize" || action === "reject_preview_and_retry") {
+    } else if (action === 'finalize' || action === 'reject_preview_and_retry') {
       res.status(400).json({
         success: false,
-        error: `conversationId is required to ${action} a model`,
+        error: `conversationId is required to ${action} a model`
       });
       return;
     }
 
     setSseHeaders(res);
-    logger.debug("SSE connection established for model generation");
+    logger.debug('SSE connection established for model generation');
 
     try {
-      if (action === "finalize") {
-        await this.modelWorkflow.finalizeModelStream(
-          res,
-          conversationId as string,
-          format
-        );
-      } else if (action === "reject_preview_and_retry") {
-        await this.modelWorkflow.rejectAndRetryStream(
-          res,
-          conversationId as string,
-          format
-        );
+      if (action === 'finalize') {
+        await this.modelWorkflow.finalizeModelStream(res, conversationId as string, format);
+      } else if (action === 'reject_preview_and_retry') {
+        await this.modelWorkflow.rejectAndRetryStream(res, conversationId as string, format);
       } else {
-        await this.modelWorkflow.generateModelStream(
-          res,
-          prompt as string,
-          format,
-          conversationId
-        );
+        await this.modelWorkflow.generateModelStream(res, prompt as string, format, conversationId);
       }
       res.end();
     } catch (error: any) {
-      logger.error("Error generating model (streaming)", {
+      logger.error('Error generating model (streaming)', {
         error: error.message,
-        stack: error.stack,
+        stack: error.stack
       });
       writeSse(res, SSE_EVENTS.error, {
-        error: error.message || "Failed to generate model",
+        error: error.message || 'Failed to generate model'
       });
       res.end();
     }
@@ -116,43 +101,40 @@ export class ModelController {
     const { id, format } = req.params;
 
     try {
-      if (format !== "stl" && format !== "3mf") {
-        logger.warn("Invalid format requested for model file", {
+      if (format !== 'stl' && format !== '3mf') {
+        logger.warn('Invalid format requested for model file', {
           fileId: id,
-          format,
+          format
         });
         res.status(400).json({
           success: false,
-          error: 'Format must be either "stl" or "3mf"',
+          error: 'Format must be either "stl" or "3mf"'
         });
         return;
       }
 
-      const result = await this.modelWorkflow.getModelFile(
-        id,
-        format as "stl" | "3mf"
-      );
+      const result = await this.modelWorkflow.getModelFile(id, format as 'stl' | '3mf');
 
       if (!result) {
         res.status(404).json({
           success: false,
-          error: "Model file not found",
+          error: 'Model file not found'
         });
         return;
       }
 
       res.sendFile(result.filePath);
     } catch (error: any) {
-      logger.error("Error retrieving model file", {
+      logger.error('Error retrieving model file', {
         fileId: id,
         format,
         error: error.message,
-        stack: error.stack,
+        stack: error.stack
       });
 
       res.status(500).json({
         success: false,
-        error: "Failed to retrieve model file",
+        error: 'Failed to retrieve model file'
       });
     }
   }

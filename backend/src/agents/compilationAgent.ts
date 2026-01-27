@@ -1,6 +1,6 @@
-import * as fs from "fs/promises";
-import { logger } from "../infrastructure/logger/logger";
-import { AiClient, InputMessage } from "../clients/aiClient";
+import * as fs from 'fs/promises';
+import { logger } from '../infrastructure/logger/logger';
+import { AiClient, InputMessage } from '../clients/aiClient';
 
 export interface RejectionAnalysis {
   issues: string[];
@@ -8,9 +8,7 @@ export interface RejectionAnalysis {
 }
 
 export class CompilationAgent {
-  constructor(
-    private aiClient: AiClient
-  ) { }
+  constructor(private aiClient: AiClient) {}
 
   /**
    * Analyzes a rejected preview and creates a plan to fix issues based on conversation history.
@@ -22,42 +20,41 @@ export class CompilationAgent {
     scadCode: string
   ): Promise<RejectionAnalysis> {
     const imageBuffer = await fs.readFile(previewPath);
-    const imageBase64 = imageBuffer.toString("base64");
+    const imageBase64 = imageBuffer.toString('base64');
 
     const output = await this.aiClient.visionCompletion({
-      prompt:
-        this.#buildPrompt(originalPrompt, scadCode),
+      prompt: this.#buildPrompt(originalPrompt, scadCode),
       imageBase64,
-      modelTier: "medium",
+      modelTier: 'medium'
     });
 
-    let analysis: RejectionAnalysis = { issues: [], plan: "" };
+    let analysis: RejectionAnalysis = { issues: [], plan: '' };
 
-    if (typeof output === "string") {
+    if (typeof output === 'string') {
       try {
         const parsed = JSON.parse(output);
         analysis = {
           issues: Array.isArray(parsed.issues) ? parsed.issues : [],
-          plan: parsed.plan || "Regenerate the model with closer attention to the original request.",
+          plan: parsed.plan || 'Regenerate the model with closer attention to the original request.'
         };
       } catch {
         // If JSON parsing fails, treat the entire output as the plan
         analysis = {
-          issues: ["Unable to parse specific issues"],
-          plan: output || "Regenerate the model with closer attention to the original request.",
+          issues: ['Unable to parse specific issues'],
+          plan: output || 'Regenerate the model with closer attention to the original request.'
         };
       }
     } else {
       const parsed = output as { issues?: string[]; plan?: string };
       analysis = {
         issues: Array.isArray(parsed.issues) ? parsed.issues : [],
-        plan: parsed.plan || "Regenerate the model with closer attention to the original request.",
+        plan: parsed.plan || 'Regenerate the model with closer attention to the original request.'
       };
     }
 
-    logger.info("Rejection analysis completed", {
+    logger.info('Rejection analysis completed', {
       issueCount: analysis.issues.length,
-      planLength: analysis.plan.length,
+      planLength: analysis.plan.length
     });
 
     return analysis;

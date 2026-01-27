@@ -1,19 +1,19 @@
-import { Response } from "express";
-import { OpenScadStreamEvent } from "../../agents/codeGenerationAgent";
-import { OpenSCADService } from "../../services/openscadService";
-import { FileStorageService } from "../../services/fileStorageService";
-import { ConversationService } from "../../services/conversationService";
-import { logger } from "../../infrastructure/logger/logger";
-import { SSE_EVENTS, writeAiStreamEvent, writeSse } from "../../utils/sseUtils";
-import { CodeGenerationAgent } from "../../agents/codeGenerationAgent";
-import { RetryFeedbackAgent } from "../../agents/retryFeedbackAgent";
-import { CompilationAgent } from "../../agents/compilationAgent";
-import { AiClient } from "../../clients/aiClient";
-import { RetryRunner } from "../../runners/retryRunner";
-import { config } from "../../config/config";
+import { Response } from 'express';
+import { OpenScadStreamEvent } from '../../agents/codeGenerationAgent';
+import { OpenSCADService } from '../../services/openscadService';
+import { FileStorageService } from '../../services/fileStorageService';
+import { ConversationService } from '../../services/conversationService';
+import { logger } from '../../infrastructure/logger/logger';
+import { SSE_EVENTS, writeAiStreamEvent, writeSse } from '../../utils/sseUtils';
+import { CodeGenerationAgent } from '../../agents/codeGenerationAgent';
+import { RetryFeedbackAgent } from '../../agents/retryFeedbackAgent';
+import { CompilationAgent } from '../../agents/compilationAgent';
+import { AiClient } from '../../clients/aiClient';
+import { RetryRunner } from '../../runners/retryRunner';
+import { config } from '../../config/config';
 
 interface GenerationFailure {
-  type: "validation" | "compilation";
+  type: 'validation' | 'compilation';
   message: string;
 }
 
@@ -37,7 +37,7 @@ export class ModelWorkflow {
     protected fileStorage: FileStorageService,
     protected aiClient: AiClient
   ) {
-    logger.debug("ModelWorkflow initialized");
+    logger.debug('ModelWorkflow initialized');
     this.codeGenerationAgent = new CodeGenerationAgent(this.aiClient);
     this.retryFeedbackAgent = new RetryFeedbackAgent(this.conversationService);
     this.compilationAgent = new CompilationAgent(this.aiClient);
@@ -47,7 +47,7 @@ export class ModelWorkflow {
   async generateModelStream(
     res: Response,
     prompt: string,
-    format: "stl" | "3mf",
+    format: 'stl' | '3mf',
     conversationId?: string
   ): Promise<void> {
     if (conversationId) {
@@ -64,23 +64,23 @@ export class ModelWorkflow {
   protected async createConversationAndGenerate(
     res: Response,
     prompt: string,
-    format: "stl" | "3mf"
+    format: 'stl' | '3mf'
   ): Promise<void> {
-    logger.info("Creating conversation and generating model (streaming)", {
+    logger.info('Creating conversation and generating model (streaming)', {
       promptLength: prompt.length,
-      format,
+      format
     });
 
     const conversation = await this.conversationService.createConversation();
-    logger.info("Conversation created", { conversationId: conversation.id });
+    logger.info('Conversation created', { conversationId: conversation.id });
 
     writeSse(res, SSE_EVENTS.conversationCreated, {
-      conversationId: conversation.id,
+      conversationId: conversation.id
     });
 
     await this.conversationService.addUserMessage(conversation.id, prompt);
-    logger.debug("User message added to conversation", {
-      conversationId: conversation.id,
+    logger.debug('User message added to conversation', {
+      conversationId: conversation.id
     });
 
     await this.generateAndCompileWithRetry(res, conversation.id, prompt, format, true);
@@ -89,17 +89,17 @@ export class ModelWorkflow {
   protected async generateWithConversation(
     res: Response,
     prompt: string,
-    format: "stl" | "3mf",
+    format: 'stl' | '3mf',
     conversationId: string
   ): Promise<void> {
-    logger.info("Updating model from conversation (streaming)", {
+    logger.info('Updating model from conversation (streaming)', {
       conversationId,
       promptLength: prompt.length,
-      format,
+      format
     });
 
     await this.conversationService.addUserMessage(conversationId, prompt);
-    logger.debug("User message added", { conversationId });
+    logger.debug('User message added', { conversationId });
 
     await this.generateAndCompileWithRetry(res, conversationId, prompt, format, false);
   }
@@ -108,7 +108,7 @@ export class ModelWorkflow {
     res: Response,
     conversationId: string,
     prompt: string,
-    format: "stl" | "3mf",
+    format: 'stl' | '3mf',
     isNewConversation: boolean
   ): Promise<void> {
     const maxAttempts = Math.max(1, config.openscad.maxCompileRetries);
@@ -124,53 +124,48 @@ export class ModelWorkflow {
     // Preview is ready - save to conversation for later finalization
     await this.conversationService.addAssistantMessage(
       conversationId,
-      isNewConversation
-        ? `Generated preview for: ${prompt}`
-        : `Updated preview for: ${prompt}`,
+      isNewConversation ? `Generated preview for: ${prompt}` : `Updated preview for: ${prompt}`,
       result.scadCode,
       undefined, // No model URL yet
       format,
       result.previewUrl
     );
-    logger.info("Preview ready - awaiting user approval", {
+    logger.info('Preview ready - awaiting user approval', {
       conversationId,
-      previewUrl: result.previewUrl,
+      previewUrl: result.previewUrl
     });
   }
 
   protected async generateAndCompile(
     res: Response,
     conversationId: string,
-    format: "stl" | "3mf",
+    format: 'stl' | '3mf'
   ): Promise<PreviewResult> {
     // Get conversation messages for AI context
     const messages = await this.conversationService.getConversationMessages(conversationId);
-    logger.debug("Retrieved conversation messages for AI context", {
+    logger.debug('Retrieved conversation messages for AI context', {
       conversationId,
-      messages,
+      messages
     });
 
     // Generate code
     let chunkCount = 0;
-    const scadCode = await this.codeGenerationAgent.generateCode(
-      messages,
-      (event: OpenScadStreamEvent) => {
-        if (event.type === "code_delta") {
-          chunkCount++;
-        }
-        writeAiStreamEvent(res, event);
+    const scadCode = await this.codeGenerationAgent.generateCode(messages, (event: OpenScadStreamEvent) => {
+      if (event.type === 'code_delta') {
+        chunkCount++;
       }
-    );
+      writeAiStreamEvent(res, event);
+    });
 
-    logger.info("Code generation completed", {
+    logger.info('Code generation completed', {
       conversationId,
       codeLength: scadCode.length,
-      chunkCount,
+      chunkCount
     });
 
     // Compile preview
     writeSse(res, SSE_EVENTS.compiling, {
-      message: "Rendering preview...",
+      message: 'Rendering preview...'
     });
 
     try {
@@ -178,9 +173,9 @@ export class ModelWorkflow {
 
       // Preview compiled successfully
       writeSse(res, SSE_EVENTS.previewReady, {
-        message: "Preview ready - awaiting approval",
+        message: 'Preview ready - awaiting approval',
         previewUrl: previewResult.previewUrl,
-        fileId: previewResult.fileId,
+        fileId: previewResult.fileId
       });
 
       return {
@@ -188,25 +183,25 @@ export class ModelWorkflow {
         fileId: previewResult.fileId,
         previewUrl: previewResult.previewUrl,
         scadPath: previewResult.scadPath,
-        previewPath: previewResult.previewPath,
+        previewPath: previewResult.previewPath
       };
     } catch (error: any) {
-      const rawMessage = error?.message || "OpenSCAD compilation error";
+      const rawMessage = error?.message || 'OpenSCAD compilation error';
       const parsed = this.openscadService.parseError(rawMessage);
-      logger.warn("OpenSCAD compilation failed", {
+      logger.warn('OpenSCAD compilation failed', {
         conversationId,
-        error: rawMessage,
+        error: rawMessage
       });
 
       await this.retryFeedbackAgent.recordFailure(
-        "compilation",
+        'compilation',
         conversationId,
         scadCode,
         format,
         parsed.message
       );
 
-      const failure: GenerationFailure = { type: "compilation", message: parsed.message };
+      const failure: GenerationFailure = { type: 'compilation', message: parsed.message };
       throw failure;
     }
   }
@@ -219,39 +214,35 @@ export class ModelWorkflow {
   ): void {
     if (attempt === 1) {
       writeSse(res, SSE_EVENTS.generationStart, {
-        message: "Generating OpenSCAD code...",
+        message: 'Generating OpenSCAD code...'
       });
       return;
     }
 
-    if (lastFailure?.type === "validation") {
+    if (lastFailure?.type === 'validation') {
       writeSse(res, SSE_EVENTS.generationStart, {
-        message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`,
+        message: `Preview validation failed, retrying (${attempt}/${maxAttempts})...`
       });
       return;
     }
 
     writeSse(res, SSE_EVENTS.generationStart, {
-      message: `Compile failed, retrying (${attempt}/${maxAttempts})...`,
+      message: `Compile failed, retrying (${attempt}/${maxAttempts})...`
     });
   }
 
-  async getModelFile(
-    id: string,
-    format: "stl" | "3mf"
-  ): Promise<{ filePath: string } | null> {
-    logger.info("Retrieving model file", { fileId: id, format });
+  async getModelFile(id: string, format: 'stl' | '3mf'): Promise<{ filePath: string } | null> {
+    logger.info('Retrieving model file', { fileId: id, format });
 
     const filePath = this.fileStorage.getOutputPath(id, format);
     const exists = await this.fileStorage.fileExists(filePath);
 
     if (!exists) {
-      logger.warn("Model file not found", { fileId: id, format, filePath });
+      logger.warn('Model file not found', { fileId: id, format, filePath });
       return null;
     }
 
-    logger.info("Sending model file", { fileId: id, format, filePath });
+    logger.info('Sending model file', { fileId: id, format, filePath });
     return { filePath };
   }
-
 }

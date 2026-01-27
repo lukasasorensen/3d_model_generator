@@ -22,12 +22,10 @@ export function EmptyState() {
           />
         </svg>
       </div>
-      <h2 className="text-2xl font-semibold text-slate-800 mb-2">
-        Create Your First Model
-      </h2>
+      <h2 className="text-2xl font-semibold text-slate-800 mb-2">Create Your First Model</h2>
       <p className="text-slate-600 max-w-md mx-auto">
-        Describe the 3D model you want to create in the text box above. The AI
-        will generate OpenSCAD code and compile it into a downloadable 3D model.
+        Describe the 3D model you want to create in the text box above. The AI will generate OpenSCAD code and
+        compile it into a downloadable 3D model.
       </p>
     </div>
   );

@@ -3,9 +3,9 @@
  * Displays the list of conversations with selection and actions.
  */
 
-import { useEffect } from "react";
-import { ConversationListItem } from "../../types";
-import { formatRelativeDate } from "../../utils/dateUtils";
+import { useEffect } from 'react';
+import { ConversationListItem } from '../../types';
+import { formatRelativeDate } from '../../utils/dateUtils';
 
 interface ConversationSidebarProps {
   conversations: ConversationListItem[];
@@ -22,7 +22,7 @@ export function ConversationSidebar({
   onSelectConversation,
   onNewConversation,
   onDeleteConversation,
-  onRefresh,
+  onRefresh
 }: ConversationSidebarProps) {
   useEffect(() => {
     onRefresh();
@@ -35,12 +35,7 @@ export function ConversationSidebar({
           onClick={onNewConversation}
           className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path
               fillRule="evenodd"
               d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
@@ -64,12 +59,12 @@ export function ConversationSidebar({
                 <div
                   onClick={() => onSelectConversation(conv.id)}
                   className={`w-full px-4 py-3 text-left hover:bg-slate-800 transition-colors group cursor-pointer ${
-                    activeConversationId === conv.id ? "bg-slate-800" : ""
+                    activeConversationId === conv.id ? 'bg-slate-800' : ''
                   }`}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       onSelectConversation(conv.id);
                     }
@@ -77,13 +72,10 @@ export function ConversationSidebar({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {conv.title || "Untitled"}
-                      </p>
+                      <p className="text-sm font-medium truncate">{conv.title || 'Untitled'}</p>
                       <p className="text-xs text-slate-400 mt-1">
                         {conv.messageCount} message
-                        {conv.messageCount !== 1 ? "s" : ""} •{" "}
-                        {formatRelativeDate(conv.updatedAt)}
+                        {conv.messageCount !== 1 ? 's' : ''} • {formatRelativeDate(conv.updatedAt)}
                       </p>
                     </div>
                     <button
@@ -116,9 +108,7 @@ export function ConversationSidebar({
       </div>
 
       <div className="p-4 border-t border-slate-700">
-        <p className="text-xs text-slate-500 text-center">
-          OpenSCAD AI Generator
-        </p>
+        <p className="text-xs text-slate-500 text-center">OpenSCAD AI Generator</p>
       </div>
     </div>
   );

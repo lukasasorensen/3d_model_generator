@@ -9,17 +9,11 @@ interface PreviewApprovalCardProps {
   onReject: () => void;
 }
 
-export function PreviewApprovalCard({
-  previewUrl,
-  onApprove,
-  onReject,
-}: PreviewApprovalCardProps) {
+export function PreviewApprovalCard({ previewUrl, onApprove, onReject }: PreviewApprovalCardProps) {
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
       <div className="text-center">
-        <h3 className="text-lg font-semibold text-blue-800 mb-2">
-          Does this model look correct?
-        </h3>
+        <h3 className="text-lg font-semibold text-blue-800 mb-2">Does this model look correct?</h3>
         <p className="text-sm text-blue-600 mb-4">
           Review the preview below and let us know if it matches your request.
         </p>

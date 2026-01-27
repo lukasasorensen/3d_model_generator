@@ -8,6 +8,7 @@
     "shared"
   ],
   "scripts": {
+    "pretty": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",

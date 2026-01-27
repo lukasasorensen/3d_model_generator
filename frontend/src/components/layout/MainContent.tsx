@@ -3,15 +3,15 @@
  * Main content area with header and content sections.
  */
 
-import { RefObject } from "react";
-import { PromptInput } from "../PromptInput";
-import { ErrorDisplay } from "../shared/ErrorDisplay";
-import { PreviewApprovalCard } from "../generation/PreviewApprovalCard";
-import { ValidationPromptCard } from "../generation/ValidationPromptCard";
-import { EmptyState } from "./EmptyState";
-import { ConversationView } from "../conversation/ConversationView";
-import { useConversationContext } from "../../contexts/ConversationContext";
-import { useGenerationContext } from "../../contexts/GenerationContext";
+import { RefObject } from 'react';
+import { PromptInput } from '../PromptInput';
+import { ErrorDisplay } from '../shared/ErrorDisplay';
+import { PreviewApprovalCard } from '../generation/PreviewApprovalCard';
+import { ValidationPromptCard } from '../generation/ValidationPromptCard';
+import { EmptyState } from './EmptyState';
+import { ConversationView } from '../conversation/ConversationView';
+import { useConversationContext } from '../../contexts/ConversationContext';
+import { useGenerationContext } from '../../contexts/GenerationContext';
 
 interface MainContentProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -29,10 +29,10 @@ export function MainContent({ scrollContainerRef }: MainContentProps) {
     rejectPreview,
     retryValidation,
     finalizeValidation,
-    clearError: clearGenerationError,
+    clearError: clearGenerationError
   } = useGenerationContext();
 
-  const isStreaming = loading && streaming.status !== "idle";
+  const isStreaming = loading && streaming.status !== 'idle';
   const hasActiveConversation = !!activeConversation;
   const showInitialPrompt = !hasActiveConversation && !loading;
   const showFollowUpPrompt = hasActiveConversation || loading;
@@ -44,17 +44,13 @@ export function MainContent({ scrollContainerRef }: MainContentProps) {
   };
 
   return (
-    <div
-      className={`max-w-4xl mx-auto py-8 px-6 ${showFollowUpPrompt ? "pb-40" : ""}`}
-    >
+    <div className={`max-w-4xl mx-auto py-8 px-6 ${showFollowUpPrompt ? 'pb-40' : ''}`}>
       <header className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-slate-900 mb-2">
-          OpenSCAD AI Model Generator
-        </h1>
+        <h1 className="text-4xl font-bold text-slate-900 mb-2">OpenSCAD AI Model Generator</h1>
         <p className="text-slate-600">
           {hasActiveConversation
-            ? "Add follow-up prompts to refine your model"
-            : "Describe your 3D model and watch AI create it in real-time"}
+            ? 'Add follow-up prompts to refine your model'
+            : 'Describe your 3D model and watch AI create it in real-time'}
         </p>
       </header>
 
@@ -79,11 +75,11 @@ export function MainContent({ scrollContainerRef }: MainContentProps) {
         )}
 
         {/* Preview Approval */}
-        {streaming.status === "awaiting_approval" && streaming.previewUrl && (
+        {streaming.status === 'awaiting_approval' && streaming.previewUrl && (
           <PreviewApprovalCard
             previewUrl={streaming.previewUrl}
             onApprove={() => approvePreview()}
-            onReject={() => rejectPreview("")}
+            onReject={() => rejectPreview('')}
           />
         )}
 

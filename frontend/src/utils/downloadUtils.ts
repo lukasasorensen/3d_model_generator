@@ -7,7 +7,7 @@
  * Creates a blob URL from content string.
  * Remember to revoke the URL when done using URL.revokeObjectURL(url)
  */
-export function createBlobUrl(content: string, mimeType: string = "text/plain"): string {
+export function createBlobUrl(content: string, mimeType: string = 'text/plain'): string {
   const blob = new Blob([content], { type: mimeType });
   return URL.createObjectURL(blob);
 }
@@ -16,13 +16,9 @@ export function createBlobUrl(content: string, mimeType: string = "text/plain"):
  * Downloads content as a file.
  * Automatically handles blob URL creation and cleanup.
  */
-export function downloadAsFile(
-  content: string,
-  filename: string,
-  mimeType: string = "text/plain"
-): void {
+export function downloadAsFile(content: string, filename: string, mimeType: string = 'text/plain'): void {
   const url = createBlobUrl(content, mimeType);
-  const anchor = document.createElement("a");
+  const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
   anchor.click();

@@ -3,17 +3,10 @@
  * Manages the streaming/generation state for model generation.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback } from 'react';
 
 export interface StreamingState {
-  status:
-  | "idle"
-  | "generating"
-  | "compiling"
-  | "awaiting_approval"
-  | "validating"
-  | "completed"
-  | "error";
+  status: 'idle' | 'generating' | 'compiling' | 'awaiting_approval' | 'validating' | 'completed' | 'error';
   streamingCode: string;
   streamingReasoning: string;
   statusMessage: string;
@@ -27,10 +20,10 @@ export interface ValidationPrompt {
 }
 
 const INITIAL_STREAMING_STATE: StreamingState = {
-  status: "idle",
-  streamingCode: "",
-  streamingReasoning: "",
-  statusMessage: "",
+  status: 'idle',
+  streamingCode: '',
+  streamingReasoning: '',
+  statusMessage: ''
 };
 
 export function useStreamingState() {
@@ -48,14 +41,14 @@ export function useStreamingState() {
   const appendCode = useCallback((chunk: string) => {
     setStreaming((prev) => ({
       ...prev,
-      streamingCode: prev.streamingCode + chunk,
+      streamingCode: prev.streamingCode + chunk
     }));
   }, []);
 
   const appendReasoning = useCallback((chunk: string) => {
     setStreaming((prev) => ({
       ...prev,
-      streamingReasoning: prev.streamingReasoning + chunk,
+      streamingReasoning: prev.streamingReasoning + chunk
     }));
   }, []);
 
@@ -75,6 +68,6 @@ export function useStreamingState() {
     appendCode,
     appendReasoning,
     setValidation,
-    clearValidationPrompt,
+    clearValidationPrompt
   };
 }
