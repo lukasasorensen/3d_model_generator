@@ -172,12 +172,8 @@ export class OpenAiClient extends AiClient {
       messageCount: messages.length
     });
 
-    const model = this.createModel(this.getModelForTier(modelTier));
-
-    const contextMessages = this.convertToLangChainMessages(messages).filter(
-      (message): message is HumanMessage | SystemMessage | AIMessage =>
-        message instanceof HumanMessage || message instanceof SystemMessage || message instanceof AIMessage
-    );
+    const model = this.createModel(this.getModelForTier(modelTier), 'none');
+    const contextMessages = this.convertToLangChainMessages(messages);
 
     const promptMessage = new HumanMessage({
       content: [
