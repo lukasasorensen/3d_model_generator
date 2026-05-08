@@ -1,6 +1,6 @@
 # OpenSCAD AI Model Generator
 
-An AI-powered 3D model generator that converts natural language descriptions into 3D models using OpenAI GPT-4 and OpenSCAD.
+An AI-powered 3D model generator that converts natural language descriptions into 3D models using OpenAI models through LangChain and OpenSCAD.
 
 ## Features
 
@@ -14,7 +14,7 @@ An AI-powered 3D model generator that converts natural language descriptions int
 ## Architecture
 
 - **Frontend**: React 18 + TypeScript + Vite + TailwindCSS + react-three-fiber
-- **Backend**: Node.js + TypeScript + Express + OpenAI SDK + Prisma
+- **Backend**: Node.js + TypeScript + Express + LangChain (`@langchain/openai`) + Prisma
 - **Database**: PostgreSQL (via Docker)
 - **3D Generation**: OpenSCAD CLI
 - **Observability**: OpenTelemetry + Grafana LGTM (Loki, Tempo, Mimir)
@@ -87,7 +87,7 @@ openscad --version
    PORT=3001
    NODE_ENV=development
 
-   # OpenAI
+   # OpenAI (used by LangChain)
    OPENAI_API_KEY=sk-your-api-key-here
 
    # PostgreSQL Connection (individual variables for Docker Compose)
@@ -110,7 +110,7 @@ OPENSCAD_MAX_RETRIES=2
 
  | Variable            | Required | Description                                     |
  | ------------------- | -------- | ----------------------------------------------- |
- | `OPENAI_API_KEY`    | Yes      | Your OpenAI API key                             |
+ | `OPENAI_API_KEY`    | Yes      | Your OpenAI API key (used by LangChain OpenAI) |
  | `POSTGRES_USERNAME` | Yes      | PostgreSQL username                             |
  | `POSTGRES_PASSWORD` | Yes      | PostgreSQL password                             |
  | `POSTGRES_DB`       | Yes      | PostgreSQL database name                        |
@@ -216,7 +216,7 @@ open-scad-generate-models/
 ├── backend/               # Express backend server
 │   ├── prisma/            # Prisma schema and migrations
 │   ├── src/
-│   │   ├── services/      # Business logic (OpenAI, OpenSCAD, Conversations)
+│   │   ├── services/      # Business logic (AI workflow, OpenSCAD, Conversations)
 │   │   ├── controllers/   # Request handlers
 │   │   └── routes/        # API routes
 │   ├── generated/         # Generated files (.scad, .stl, .3mf)
@@ -600,7 +600,8 @@ MIT
 ## Acknowledgments
 
 - [OpenSCAD](https://openscad.org/) - The Programmers Solid 3D CAD Modeller
-- [OpenAI](https://openai.com/) - GPT-4 API
+- [OpenAI](https://openai.com/) - Foundation models
+- [LangChain](https://www.langchain.com/) - AI application framework for model integrations
 - [Prisma](https://www.prisma.io/) - Next-generation ORM for Node.js
 - [react-three-fiber](https://docs.pmnd.rs/react-three-fiber/) - React renderer for three.js
 - [Three.js](https://threejs.org/) - JavaScript 3D library

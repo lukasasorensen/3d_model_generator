@@ -2,7 +2,7 @@
 PORT=3001
 NODE_ENV=development
 
-# OpenAI
+# OpenAI (used by LangChain)
 OPENAI_API_KEY=sk-your-api-key-here
 
 # PostgreSQL Connection

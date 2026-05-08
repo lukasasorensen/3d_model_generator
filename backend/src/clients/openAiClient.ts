@@ -1,4 +1,6 @@
-import OpenAI from 'openai';
+import { ChatOpenAI } from '@langchain/openai';
+import { AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { z } from 'zod/v3';
 import {
   AiClient,
   InputMessage,
@@ -8,39 +10,34 @@ import {
 } from './aiClient';
 import { logger } from '../infrastructure/logger/logger';
 import { config } from '../config/config';
-import { ReasoningEffort } from 'openai/resources/shared';
-import { ResponseStreamParams } from 'openai/lib/responses/ResponseStream';
-import { ResponseCreateParams } from 'openai/resources/responses/responses';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { zodTextFormat } = require('openai/helpers/zod') as {
-  zodTextFormat: (schema: unknown, name: string) => unknown;
-};
 
 /**
  * OpenAI implementation of the AI client.
  * Provides event-based SSE streaming using the OpenAI API.
  */
 export class OpenAiClient extends AiClient {
-  private client: OpenAI;
+  private readonly apiKey: string;
 
   constructor(apiKey: string) {
     super();
     logger.debug('Initializing OpenAI client');
-    this.client = new OpenAI({ apiKey });
+    this.apiKey = apiKey;
     logger.debug('OpenAI client initialized');
   }
 
   /**
-   * Convert generic InputMessage array to OpenAI's input format.
-   * OpenAI Responses API uses an array of input items with type and content.
+   * Convert generic InputMessage array to LangChain messages.
    */
-  private convertToOpenAiInput(
-    messages: InputMessage[]
-  ): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
-    return messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content
-    }));
+  private convertToLangChainMessages(messages: InputMessage[]): BaseMessage[] {
+    return messages.map((msg) => {
+      if (msg.role === 'system') {
+        return new SystemMessage(msg.content);
+      }
+      if (msg.role === 'assistant') {
+        return new AIMessage({ content: msg.content });
+      }
+      return new HumanMessage(msg.content);
+    });
   }
 
   /**
@@ -58,133 +55,78 @@ export class OpenAiClient extends AiClient {
     });
 
     try {
-      const openAiInput = this.convertToOpenAiInput(messages);
-
-      const responseParams: ResponseStreamParams = {
-        model: this.getModelForTier(modelTier ?? 'small'),
-        instructions: systemPrompt,
-        input: openAiInput,
-        stream: true
-      };
-
-      // only for gpt-5 models
-      if (responseParams.model.includes('gpt-5')) {
-        responseParams.reasoning = {
-          effort: this.getReasoningEffortForTier(reasoningEffort) as ReasoningEffort
-        };
-
-        if (reasoningEffort !== 'none') {
-          responseParams.reasoning.summary = 'auto';
-        }
-      }
-
-      const stream = this.client.responses.stream(responseParams);
+      const model = this.createModel(this.getModelForTier(modelTier ?? 'small'), reasoningEffort);
+      const langChainMessages: BaseMessage[] = [
+        new SystemMessage(systemPrompt),
+        ...this.convertToLangChainMessages(messages)
+      ];
 
       let totalChunks = 0;
       let totalLength = 0;
+      let inputTokens: number | undefined;
+      let outputTokens: number | undefined;
 
-      // Track tool calls in progress
-      const activeToolCalls: Map<string, { name: string; arguments: string }> = new Map();
+      const toolArgumentsById = new Map<string, string>();
 
-      for await (const event of stream) {
-        // dont include delta events in the logs as they are chunks of text that fill up the logs
-        if (!event.type.includes('delta')) {
-          logger.debug('OpenAI event', { eventType: event.type });
+      const stream = await model.stream(langChainMessages);
+      for await (const chunk of stream) {
+        this.captureUsage(chunk, (inTokens, outTokens) => {
+          inputTokens = inTokens;
+          outputTokens = outTokens;
+        });
+
+        for (const toolCallChunk of chunk.tool_call_chunks ?? []) {
+          const toolCallId = toolCallChunk.id || `tool_${toolCallChunk.index ?? 0}`;
+          const argumentsDelta = toolCallChunk.args || '';
+
+          if (!toolArgumentsById.has(toolCallId)) {
+            toolArgumentsById.set(toolCallId, '');
+            onEvent({
+              type: 'tool_call_start',
+              toolCallId,
+              toolName: toolCallChunk.name || 'unknown_tool'
+            });
+          }
+
+          if (argumentsDelta) {
+            toolArgumentsById.set(toolCallId, `${toolArgumentsById.get(toolCallId) || ''}${argumentsDelta}`);
+            onEvent({
+              type: 'tool_call_delta',
+              toolCallId,
+              argumentsDelta
+            });
+          }
         }
 
-        switch (event.type) {
-          // Text output delta
-          case 'response.output_text.delta':
-            if (event.delta) {
-              totalChunks++;
-              totalLength += event.delta.length;
-              onEvent({
-                type: 'text_delta',
-                delta: event.delta
-              });
-            }
-            break;
-
-          // Reasoning/thinking delta (for reasoning models)
-          case 'response.reasoning_summary_text.delta':
-            if (event.delta) {
-              onEvent({
-                type: 'reasoning_delta',
-                delta: event.delta
-              });
-            }
-            break;
-
-          // Function call started
-          case 'response.function_call_arguments.delta':
-            // OpenAI sends function call arguments as deltas
-            // We need to track them by their call_id
-            if (event.item_id) {
-              const existing = activeToolCalls.get(event.item_id);
-              if (existing) {
-                existing.arguments += event.delta || '';
-                onEvent({
-                  type: 'tool_call_delta',
-                  toolCallId: event.item_id,
-                  argumentsDelta: event.delta || ''
-                });
-              }
-            }
-            break;
-
-          // Output item added - could be a function call
-          case 'response.output_item.added':
-            if (event.item && event.item.type === 'function_call') {
-              const item = event.item as {
-                id: string;
-                call_id: string;
-                name: string;
-              };
-              activeToolCalls.set(item.id, {
-                name: item.name,
-                arguments: ''
-              });
-              onEvent({
-                type: 'tool_call_start',
-                toolCallId: item.id,
-                toolName: item.name
-              });
-            }
-            break;
-
-          // Output item completed - function call done
-          case 'response.output_item.done':
-            if (event.item && event.item.type === 'function_call') {
-              const item = event.item as { id: string; arguments: string };
-              const toolCall = activeToolCalls.get(item.id);
-              if (toolCall) {
-                onEvent({
-                  type: 'tool_call_end',
-                  toolCallId: item.id,
-                  arguments: item.arguments || toolCall.arguments
-                });
-                activeToolCalls.delete(item.id);
-              }
-            }
-            break;
-
-          // Response completed
-          case 'response.completed':
-            // Extract usage if available
-            const response = event.response;
-            const usage = response?.usage;
-            onEvent({
-              type: 'done',
-              usage: usage
-                ? {
-                    inputTokens: usage.input_tokens,
-                    outputTokens: usage.output_tokens
-                  }
-                : undefined
-            });
-            break;
+        const textDelta = this.extractText(chunk);
+        if (textDelta) {
+          totalChunks++;
+          totalLength += textDelta.length;
+          onEvent({
+            type: 'text_delta',
+            delta: textDelta
+          });
         }
       }
+
+      for (const [toolCallId, argumentsValue] of toolArgumentsById.entries()) {
+        onEvent({
+          type: 'tool_call_end',
+          toolCallId,
+          arguments: argumentsValue
+        });
+      }
+
+      onEvent({
+        type: 'done',
+        usage:
+          inputTokens !== undefined && outputTokens !== undefined
+            ? {
+                inputTokens,
+                outputTokens
+              }
+            : undefined
+      });
 
       logger.debug('Streaming completion finished', {
         totalChunks,
@@ -230,59 +172,93 @@ export class OpenAiClient extends AiClient {
       messageCount: messages.length
     });
 
-    // Build input array: conversation messages first, then the vision prompt with image
-    const input: ResponseCreateParams['input'] = [];
+    const model = this.createModel(this.getModelForTier(modelTier));
 
-    // Add conversation history as context
-    for (const msg of messages) {
-      (input as any[]).push({
-        role: msg.role,
-        content: msg.content
-      });
-    }
+    const contextMessages = this.convertToLangChainMessages(messages).filter(
+      (message): message is HumanMessage | SystemMessage | AIMessage =>
+        message instanceof HumanMessage || message instanceof SystemMessage || message instanceof AIMessage
+    );
 
-    // Add the vision prompt with the image as the final user message
-    (input as any[]).push({
-      role: 'user',
+    const promptMessage = new HumanMessage({
       content: [
-        { type: 'input_text', text: prompt },
         {
-          type: 'input_image',
-          image_url: `data:image/png;base64,${imageBase64}`,
-          detail: 'auto'
+          type: 'text',
+          text: prompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:image/png;base64,${imageBase64}`
+          }
         }
       ]
     });
 
-    const responseParams: ResponseCreateParams = {
-      model: this.getModelForTier(modelTier),
-      input
-    };
+    const allMessages: BaseMessage[] = [...contextMessages, promptMessage];
 
     if (structuredOutput) {
-      (responseParams as any).text = {
-        format: zodTextFormat(structuredOutput, 'structured_output')
-      };
+      const structuredModel = model.withStructuredOutput(structuredOutput as z.ZodTypeAny);
+      const output = await structuredModel.invoke(allMessages);
+      return output as T;
     }
 
-    const response = await this.client.responses.create(responseParams);
-
-    const outputText =
-      (response as any).output_text || (response as any).output?.[0]?.content?.[0]?.text || '';
-
-    if (structuredOutput) {
-      try {
-        return JSON.parse(outputText) as T;
-      } catch {
-        logger.error('Invalid structured output', { outputText });
-      }
-    }
+    const response = await model.invoke(allMessages);
+    const outputText = this.extractText(response);
 
     logger.debug('Vision completion received', {
       outputLength: outputText.length
     });
 
     return outputText as T;
+  }
+
+  private createModel(model: string, reasoningEffort?: 'none' | 'low' | 'medium' | 'high'): ChatOpenAI {
+    const modelKwargs: Record<string, unknown> = {};
+    if (model.includes('gpt-5') && reasoningEffort && reasoningEffort !== 'none') {
+      modelKwargs.reasoning = {
+        effort: this.getReasoningEffortForTier(reasoningEffort),
+        summary: 'auto'
+      };
+    }
+
+    return new ChatOpenAI({
+      model,
+      apiKey: this.apiKey,
+      ...(Object.keys(modelKwargs).length > 0 ? { modelKwargs } : {})
+    });
+  }
+
+  private extractText(message: { content: unknown }): string {
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
+
+    if (!Array.isArray(message.content)) {
+      return '';
+    }
+
+    return message.content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+          return part.text;
+        }
+        return '';
+      })
+      .join('');
+  }
+
+  private captureUsage(chunk: AIMessageChunk, onUsage: (inputTokens: number, outputTokens: number) => void): void {
+    const usage = (chunk as any).usage_metadata || (chunk as any).response_metadata?.tokenUsage;
+
+    const inputTokens = usage?.input_tokens ?? usage?.promptTokens;
+    const outputTokens = usage?.output_tokens ?? usage?.completionTokens;
+
+    if (typeof inputTokens === 'number' && typeof outputTokens === 'number') {
+      onUsage(inputTokens, outputTokens);
+    }
   }
 
   private getModelForTier(modelTier: 'tiny' | 'small' | 'medium' | 'large' | 'xlarge'): string {

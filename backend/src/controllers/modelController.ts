@@ -98,7 +98,8 @@ export class ModelController {
   }
 
   async getModelFile(req: Request, res: Response): Promise<void> {
-    const { id, format } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const format = Array.isArray(req.params.format) ? req.params.format[0] : req.params.format;
 
     try {
       if (format !== 'stl' && format !== '3mf') {
