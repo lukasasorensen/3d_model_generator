@@ -71,21 +71,29 @@ export class FileStorageService {
 
   getOutputPath(id: string, format: 'stl' | '3mf'): string {
     const dir = format === 'stl' ? this.stlDir : this.mfDir;
-    const outputPath = path.join(dir, `${id}.${format}`);
+    const safeId = this.sanitizeFileId(id);
+    const outputPath = this.buildSafePath(dir, `${safeId}.${format}`);
     logger.debug('Generated output path', { id, format, outputPath });
     return outputPath;
   }
 
   getScadPath(id: string): string {
-    return path.join(this.scadDir, `${id}.scad`);
+    const safeId = this.sanitizeFileId(id);
+    return this.buildSafePath(this.scadDir, `${safeId}.scad`);
   }
 
   getPreviewPath(id: string): string {
+    const safeId = this.sanitizeFileId(id);
     const previewsDir = path.join(path.dirname(this.scadDir), 'previews');
-    return path.join(previewsDir, `${id}.png`);
+    return this.buildSafePath(previewsDir, `${safeId}.png`);
   }
 
   async fileExists(filePath: string): Promise<boolean> {
+    if (!this.isManagedPath(filePath)) {
+      logger.warn('Rejected file existence check for unmanaged path', { filePath });
+      return false;
+    }
+
     try {
       await fs.access(filePath);
       logger.debug('File exists', { filePath });
@@ -156,6 +164,31 @@ export class FileStorageService {
     logger.info('File cleanup completed', {
       filesDeleted: totalDeleted,
       errors: totalErrors
+    });
+  }
+
+  private sanitizeFileId(id: string): string {
+    if (!/^[a-zA-Z0-9-]+$/.test(id)) {
+      throw new Error('File ID must contain only alphanumeric characters and hyphens');
+    }
+    return id;
+  }
+
+  private buildSafePath(baseDir: string, fileName: string): string {
+    const resolvedBaseDir = path.resolve(baseDir);
+    const resolvedPath = path.resolve(baseDir, fileName);
+    if (resolvedPath !== resolvedBaseDir && !resolvedPath.startsWith(`${resolvedBaseDir}${path.sep}`)) {
+      throw new Error('File path escapes managed directory');
+    }
+    return resolvedPath;
+  }
+
+  private isManagedPath(filePath: string): boolean {
+    const resolvedPath = path.resolve(filePath);
+    const managedDirs = [this.scadDir, this.stlDir, this.mfDir, path.join(path.dirname(this.scadDir), 'previews')];
+    return managedDirs.some((dir) => {
+      const resolvedDir = path.resolve(dir);
+      return resolvedPath === resolvedDir || resolvedPath.startsWith(`${resolvedDir}${path.sep}`);
     });
   }
 }

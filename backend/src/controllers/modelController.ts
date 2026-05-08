@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import { ModelGenerationRequest } from '../../../shared/src/types/model';
 import { logger } from '../infrastructure/logger/logger';
 import { SSE_EVENTS, setSseHeaders, writeSse } from '../utils/sseUtils';
@@ -98,9 +99,19 @@ export class ModelController {
   }
 
   async getModelFile(req: Request, res: Response): Promise<void> {
-    const { id, format } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const format = Array.isArray(req.params.format) ? req.params.format[0] : req.params.format;
 
     try {
+      if (!id || !/^[a-zA-Z0-9-]+$/.test(id)) {
+        logger.warn('Invalid file id requested for model file', { fileId: id });
+        res.status(400).json({
+          success: false,
+          error: 'Invalid model file id'
+        });
+        return;
+      }
+
       if (format !== 'stl' && format !== '3mf') {
         logger.warn('Invalid format requested for model file', {
           fileId: id,
@@ -123,7 +134,9 @@ export class ModelController {
         return;
       }
 
-      res.sendFile(result.filePath);
+      const fileName = path.basename(result.filePath);
+      const rootDir = path.dirname(result.filePath);
+      res.sendFile(fileName, { root: rootDir });
     } catch (error: any) {
       logger.error('Error retrieving model file', {
         fileId: id,

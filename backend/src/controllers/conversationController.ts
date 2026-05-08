@@ -31,7 +31,7 @@ export class ConversationController {
   }
 
   async getConversation(req: Request, res: Response): Promise<void> {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     try {
       logger.info('Getting conversation', { conversationId: id });
@@ -67,7 +67,7 @@ export class ConversationController {
   }
 
   async deleteConversation(req: Request, res: Response): Promise<void> {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     try {
       logger.info('Deleting conversation', { conversationId: id });

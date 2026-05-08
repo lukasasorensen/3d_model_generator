@@ -23,7 +23,7 @@
     "db:push": "npm run db:push --workspace=backend"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
-    "typescript": "^5.3.3"
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
   }
 }
